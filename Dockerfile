@@ -26,18 +26,16 @@ RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
     rm -rf /var/lib/apt/lists/*
 
 # ── runpodctl ────────────────────────────────────────────────────────────────
-# Resolves the latest release tag at build time via the GitHub API.
-# Requires jq (installed above) and a network connection.
-RUN LATEST=$(curl -fsSL https://api.github.com/repos/runpod/runpodctl/releases/latest \
-        | jq -r '.tag_name') && \
-    curl -fsSL "https://github.com/runpod/runpodctl/releases/download/${LATEST}/runpodctl-linux-amd64" \
+ARG RUNPODCTL_VERSION=v2.1.9
+RUN curl -fsSL "https://github.com/runpod/runpodctl/releases/download/${RUNPODCTL_VERSION}/runpodctl-linux-amd64" \
         -o /usr/local/bin/runpodctl && \
     chmod +x /usr/local/bin/runpodctl
 
 # ── uv ───────────────────────────────────────────────────────────────────────
 # Installs uv and uvx binaries to /usr/local/bin (system-wide).
+ARG UV_VERSION=0.11.6
 RUN curl -LsSf https://astral.sh/uv/install.sh \
-        | env UV_INSTALL_DIR=/usr/local/bin sh
+        | env UV_INSTALL_DIR=/usr/local/bin UV_VERSION=${UV_VERSION} sh
 
 # ── runpod user ──────────────────────────────────────────────────────────────
 RUN useradd -m -s /bin/bash runpod && \
