@@ -14,6 +14,7 @@ RUN apt-get update --yes && \
         jq \
         tmux \
         nvtop \
+        python3-pip \
     && rm -rf /var/lib/apt/lists/*
 
 # ── GitHub CLI ───────────────────────────────────────────────────────────────
@@ -31,12 +32,6 @@ ARG RUNPODCTL_VERSION=v2.1.9
 RUN curl -fsSL "https://github.com/runpod/runpodctl/releases/download/${RUNPODCTL_VERSION}/runpodctl-linux-amd64" \
         -o /usr/local/bin/runpodctl && \
     chmod +x /usr/local/bin/runpodctl
-
-# ── uv ───────────────────────────────────────────────────────────────────────
-# Installs uv and uvx binaries to /usr/local/bin (system-wide).
-ARG UV_VERSION=0.11.6
-RUN curl -LsSf https://astral.sh/uv/install.sh \
-        | env UV_INSTALL_DIR=/usr/local/bin UV_VERSION=${UV_VERSION} sh
 
 # ── runpod user ──────────────────────────────────────────────────────────────
 RUN useradd -m -s /bin/bash runpod && \
@@ -63,9 +58,9 @@ RUN printf 'export UV=/usr/local/bin/uv\nexport UV_CACHE_DIR=/home/runpod/.cache
         > /etc/profile.d/runpod-env.sh
 
 # ── Python tools (system-wide) ───────────────────────────────────────────────
-# Install into the system Python so binaries land in /usr/local/bin and are
-# accessible to all users without PATH or venv workarounds.
-RUN uv pip install --system --break-system-packages "marimo[recommended]" huggingface_hub
+# pip bootstraps the install; marimo[recommended] pulls in uv as a dependency,
+# so no separate uv installation step is needed.
+RUN pip install --break-system-packages "marimo[recommended]" huggingface_hub
 
 # ── Startup ──────────────────────────────────────────────────────────────────
 COPY start_marimo.sh /start_marimo.sh
