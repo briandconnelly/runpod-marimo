@@ -4,6 +4,7 @@ FROM runpod/base:1.0.3-cuda1300-ubuntu2404
 ENV PYTHONUNBUFFERED=1
 
 # ── System packages ──────────────────────────────────────────────────────────
+# jq is retained as a general-purpose interactive tool in the container
 RUN apt-get update --yes && \
     DEBIAN_FRONTEND=noninteractive apt-get install --yes --no-install-recommends \
         git \
