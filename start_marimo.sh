@@ -19,6 +19,8 @@ WORKSPACE="${MARIMO_WORKSPACE:-/home/runpod/workspace}"
 #                   its PEP 723 inline script metadata, ensuring reproducibility
 MARIMO_ARGS="edit --host 0.0.0.0 --port 2971 --no-token --sandbox ${WORKSPACE}"
 
+# MARIMO_VERSION is set at build time (Dockerfile ARG → ENV → /etc/profile.d/)
+# and pins the exact marimo release so the image is deterministic.
 # uvx creates a clean isolated environment on first launch and reuses the
 # cached environment on subsequent starts.
-exec su -l runpod -c "uvx 'marimo[mcp,lsp]' $MARIMO_ARGS"
+exec su -l runpod -c "uvx 'marimo[mcp,lsp]==${MARIMO_VERSION}' $MARIMO_ARGS"
