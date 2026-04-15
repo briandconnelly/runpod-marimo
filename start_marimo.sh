@@ -1,10 +1,8 @@
 #!/bin/bash
 
-MARIMO_BIN="/home/runpod/.local/bin/marimo"
-
 # Verify marimo is installed before proceeding
-if [ ! -x "$MARIMO_BIN" ]; then
-    echo "ERROR: marimo not found or not executable at $MARIMO_BIN" >&2
+if [ ! -x "$(command -v marimo)" ]; then
+    echo "ERROR: marimo not found in PATH" >&2
     exit 1
 fi
 
@@ -20,7 +18,7 @@ fi
 # --port 2971     : marimo's default port (exposed in the Runpod template config)
 # --no-token      : disable marimo's token auth; Runpod's proxy handles auth
 # /home/runpod/workspace : open the workspace directory in the file browser
-exec su -l runpod -c "$MARIMO_BIN edit \
+exec su -l runpod -c "marimo edit \
     --host 0.0.0.0 \
     --port 2971 \
     --no-token \

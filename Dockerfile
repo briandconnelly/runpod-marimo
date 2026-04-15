@@ -50,29 +50,22 @@ RUN mkdir -p /home/runpod/workspace && \
 # ── Runtime environment overrides ────────────────────────────────────────────
 # The base image sets UV_CACHE_DIR and HF_HOME to /workspace paths that are
 # root-owned and not writable by the runpod user when no volume is mounted.
-# Override both to user-owned locations so uv and huggingface-cli work at
-# runtime regardless of whether /workspace is mounted.
+# Override both to user-owned locations so they work regardless of whether
+# /workspace is mounted. Also set UV so marimo detects uv as its package
+# manager instead of falling back to pip.
 #
 # NOTE: Docker ENV is not inherited by login shells (su -l). We write these
 # to /etc/profile.d/ so they are available to all login shells as well.
+ENV UV=/usr/local/bin/uv
 ENV UV_CACHE_DIR=/home/runpod/.cache/uv
 ENV HF_HOME=/home/runpod/.cache/huggingface
-# Setting UV to the uv executable path causes marimo to detect and use uv
-# as its package manager (rather than falling back to pip, which is not
-# installed in uv tool venvs).
-ENV UV=/usr/local/bin/uv
-
 RUN printf 'export UV=/usr/local/bin/uv\nexport UV_CACHE_DIR=/home/runpod/.cache/uv\nexport HF_HOME=/home/runpod/.cache/huggingface\n' \
         > /etc/profile.d/runpod-env.sh
 
-# ── uv tools (installed as runpod user) ──────────────────────────────────────
-# marimo     → /home/runpod/.local/bin/marimo
-# huggingface_hub → /home/runpod/.local/bin/huggingface-cli
-USER runpod
-RUN uv tool install marimo && \
-    uv tool install huggingface_hub && \
-    rm -rf "$UV_CACHE_DIR"
-USER root
+# ── Python tools (system-wide) ───────────────────────────────────────────────
+# Install into the system Python so binaries land in /usr/local/bin and are
+# accessible to all users without PATH or venv workarounds.
+RUN uv pip install --system --break-system-packages "marimo[recommended]" huggingface_hub
 
 # ── Startup ──────────────────────────────────────────────────────────────────
 COPY start_marimo.sh /start_marimo.sh
