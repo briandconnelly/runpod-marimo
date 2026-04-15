@@ -24,11 +24,20 @@ docker inspect runpod/base:1.0.3-cuda1300-ubuntu2404 \
   | jq '.[0].Config | {Entrypoint, Cmd}'
 ```
 
-Expected output will be one of:
-- `{"Entrypoint": null, "Cmd": ["/start.sh"]}` — base image uses CMD; our CMD override will work directly
-- `{"Entrypoint": ["/start.sh"], "Cmd": null}` — base image uses ENTRYPOINT; our `/start_marimo.sh` must be passed as the entrypoint override, or we must call `/start.sh` inside our script and use ENTRYPOINT in our Dockerfile
+**Confirmed result (already inspected):**
+```json
+{
+  "Entrypoint": ["/opt/nvidia/nvidia_entrypoint.sh"],
+  "Cmd": ["/start.sh"]
+}
+```
 
-> **If ENTRYPOINT is set on the base image:** In the Dockerfile (Task 3), use `ENTRYPOINT ["/start_marimo.sh"]` instead of `CMD ["/start_marimo.sh"]`, and adjust `start_marimo.sh` to not call `/start.sh` separately (since the base entrypoint already handled it).
+The base image has NVIDIA's GPU init script as its ENTRYPOINT and Runpod's `/start.sh` as CMD.
+Docker runs: `nvidia_entrypoint.sh /start.sh` by default.
+By setting `CMD ["/start_marimo.sh"]` in our Dockerfile, Docker will run: `nvidia_entrypoint.sh /start_marimo.sh`.
+This preserves NVIDIA GPU initialization while replacing the startup command.
+Do NOT use `ENTRYPOINT` in our Dockerfile — that would override NVIDIA's init.
+`start_marimo.sh` must call `/start.sh` internally (Runpod SSH/env init), then exec marimo.
 
 - [ ] **Step 2: Remove the empty placeholder files**
 
