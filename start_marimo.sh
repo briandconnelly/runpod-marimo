@@ -24,7 +24,4 @@ exec su -l runpod -c "$MARIMO_BIN edit \
     --host 0.0.0.0 \
     --port 2971 \
     --no-token \
-    /home/runpod/workspace" || {
-    echo "ERROR: failed to start marimo (exit $?)" >&2
-    exit 1
-}
+    /home/runpod/workspace"
