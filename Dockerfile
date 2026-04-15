@@ -54,8 +54,10 @@ RUN mkdir -p /home/runpod/workspace && \
 # Override UV_CACHE_DIR: the base image sets it to /workspace/.cache/uv/ which
 # is root-owned and not writable by the runpod user during the build.
 USER runpod
-RUN UV_CACHE_DIR=/home/runpod/.cache/uv uv tool install marimo && \
-    UV_CACHE_DIR=/home/runpod/.cache/uv uv tool install "huggingface_hub[cli]"
+RUN export UV_CACHE_DIR=/home/runpod/.cache/uv && \
+    uv tool install marimo && \
+    uv tool install "huggingface_hub[cli]" && \
+    rm -rf "$UV_CACHE_DIR"
 USER root
 
 # ── Startup ──────────────────────────────────────────────────────────────────
