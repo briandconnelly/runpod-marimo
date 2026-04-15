@@ -57,6 +57,10 @@ RUN curl -fsSL "https://github.com/runpod/runpodctl/releases/download/${RUNPODCT
     chmod +x /usr/local/bin/runpodctl
 
 # ── runpod user ──────────────────────────────────────────────────────────────
+# Passwordless sudo is scoped to apt-get/apt so users can install system
+# packages from notebooks and terminals. This is an intentional tradeoff:
+# apt can still run maintainer scripts as root, but removing sudo entirely
+# would break the interactive development experience on Runpod pods.
 RUN useradd -m -s /bin/bash runpod && \
     echo "runpod ALL=(ALL) NOPASSWD: /usr/bin/apt-get, /usr/bin/apt" > /etc/sudoers.d/runpod && \
     chmod 0440 /etc/sudoers.d/runpod

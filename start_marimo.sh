@@ -17,7 +17,7 @@ WORKSPACE="${MARIMO_WORKSPACE:-/home/runpod/workspace}"
 #                   handled by Runpod's proxy — do not expose port 2971 directly
 # --sandbox       : run each notebook in an isolated uv environment derived from
 #                   its PEP 723 inline script metadata, ensuring reproducibility
-MARIMO_ARGS="edit --host 0.0.0.0 --port 2971 --no-token --sandbox ${WORKSPACE}"
+MARIMO_ARGS="edit --host 0.0.0.0 --port 2971 --no-token --sandbox '${WORKSPACE}'"
 
 # MARIMO_VERSION is set at build time (Dockerfile ARG → ENV → /etc/profile.d/)
 # and pins the exact marimo release so the image is deterministic.
