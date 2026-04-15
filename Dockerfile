@@ -52,8 +52,18 @@ RUN mkdir -p /home/runpod/workspace && \
 # root-owned and not writable by the runpod user when no volume is mounted.
 # Override both to user-owned locations so uv and huggingface-cli work at
 # runtime regardless of whether /workspace is mounted.
+#
+# NOTE: Docker ENV is not inherited by login shells (su -l). We write these
+# to /etc/profile.d/ so they are available to all login shells as well.
 ENV UV_CACHE_DIR=/home/runpod/.cache/uv
 ENV HF_HOME=/home/runpod/.cache/huggingface
+# Setting UV to the uv executable path causes marimo to detect and use uv
+# as its package manager (rather than falling back to pip, which is not
+# installed in uv tool venvs).
+ENV UV=/usr/local/bin/uv
+
+RUN printf 'export UV=/usr/local/bin/uv\nexport UV_CACHE_DIR=/home/runpod/.cache/uv\nexport HF_HOME=/home/runpod/.cache/huggingface\n' \
+        > /etc/profile.d/runpod-env.sh
 
 # ── uv tools (installed as runpod user) ──────────────────────────────────────
 # marimo     → /home/runpod/.local/bin/marimo
