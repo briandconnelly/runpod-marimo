@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Marimo is now launched with `--sandbox`, which runs each notebook in an isolated `uv` environment built from its [PEP 723](https://peps.python.org/pep-0723/) inline script metadata, ensuring every notebook is fully reproducible
+- `ty` is now used as the LSP backend for in-editor type checking, powered by Astral's type checker
+- DuckDB CLI (`duckdb`) is now included as a system tool for querying files from the terminal
+
+### Removed
+
+- Automatic `polars[gpu]` injection on GPU pods via `RUNPOD_GPU_COUNT`/`MARIMO_SKIP_GPU_POLARS`/`MARIMO_EXTRA_PACKAGES`.
+  With `--sandbox` active, packages injected into the marimo server process are not available inside notebook sandboxes, so this mechanism had no effect on notebooks.
+
 ## [0.1.1] - 2026-04-15
 
 ### Added

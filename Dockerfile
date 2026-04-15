@@ -21,6 +21,8 @@ RUN apt-get update --yes && \
         jq \
         tmux \
         nvtop \
+        nodejs \
+        unzip \
     && rm -rf /var/lib/apt/lists/*
 
 # ── GitHub CLI ───────────────────────────────────────────────────────────────
@@ -32,6 +34,14 @@ RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
     apt-get update --yes && \
     DEBIAN_FRONTEND=noninteractive apt-get install --yes gh && \
     rm -rf /var/lib/apt/lists/*
+
+# ── DuckDB CLI ───────────────────────────────────────────────────────────────
+ARG DUCKDB_VERSION=v1.5.2
+RUN curl -fsSL "https://github.com/duckdb/duckdb/releases/download/${DUCKDB_VERSION}/duckdb_cli-linux-amd64.zip" \
+        -o /tmp/duckdb.zip && \
+    unzip /tmp/duckdb.zip duckdb -d /usr/local/bin && \
+    chmod +x /usr/local/bin/duckdb && \
+    rm /tmp/duckdb.zip
 
 # ── runpodctl ────────────────────────────────────────────────────────────────
 ARG RUNPODCTL_VERSION=v2.1.9
@@ -67,7 +77,7 @@ RUN printf 'export UV=/usr/bin/uv\nexport UV_CACHE_DIR=/home/runpod/.cache/uv\ne
 # huggingface_hub is installed as an isolated uv tool for the runpod user.
 # marimo itself is NOT pre-installed; it is launched via uvx so it runs in
 # its own clean virtual environment (first launch populates the cache).
-RUN su -l runpod -c "uv tool install huggingface_hub"
+RUN su -l runpod -c "uv tool install huggingface_hub && uv tool install ty"
 
 # ── Marimo config ────────────────────────────────────────────────────────────
 COPY marimo.toml /home/runpod/.config/marimo/marimo.toml
