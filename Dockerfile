@@ -56,7 +56,7 @@ RUN mkdir -p /home/runpod/workspace && \
 USER runpod
 RUN export UV_CACHE_DIR=/home/runpod/.cache/uv && \
     uv tool install marimo && \
-    uv tool install "huggingface_hub[cli]" && \
+    uv tool install huggingface_hub && \
     rm -rf "$UV_CACHE_DIR"
 USER root
 
