@@ -47,15 +47,19 @@ RUN useradd -m -s /bin/bash runpod && \
 RUN mkdir -p /home/runpod/workspace && \
     chown -R runpod:runpod /home/runpod
 
+# ── Runtime environment overrides ────────────────────────────────────────────
+# The base image sets UV_CACHE_DIR and HF_HOME to /workspace paths that are
+# root-owned and not writable by the runpod user when no volume is mounted.
+# Override both to user-owned locations so uv and huggingface-cli work at
+# runtime regardless of whether /workspace is mounted.
+ENV UV_CACHE_DIR=/home/runpod/.cache/uv
+ENV HF_HOME=/home/runpod/.cache/huggingface
+
 # ── uv tools (installed as runpod user) ──────────────────────────────────────
 # marimo     → /home/runpod/.local/bin/marimo
 # huggingface_hub → /home/runpod/.local/bin/huggingface-cli
-#
-# Override UV_CACHE_DIR: the base image sets it to /workspace/.cache/uv/ which
-# is root-owned and not writable by the runpod user during the build.
 USER runpod
-RUN export UV_CACHE_DIR=/home/runpod/.cache/uv && \
-    uv tool install marimo && \
+RUN uv tool install marimo && \
     uv tool install huggingface_hub && \
     rm -rf "$UV_CACHE_DIR"
 USER root
