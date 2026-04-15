@@ -1,5 +1,12 @@
 FROM runpod/base:1.0.3-cuda1300-ubuntu2404
 
+ARG IMAGE_VERSION=dev
+
+LABEL org.opencontainers.image.title="runpod-marimo" \
+      org.opencontainers.image.description="Marimo notebook server for Runpod GPU pods" \
+      org.opencontainers.image.authors="brian.connelly@runpod.io" \
+      org.opencontainers.image.version="${IMAGE_VERSION}"
+
 # Ensure Python output is immediately flushed to logs
 ENV PYTHONUNBUFFERED=1
 
@@ -69,5 +76,10 @@ RUN chown runpod:runpod /home/runpod/.config/marimo/marimo.toml
 # ── Startup ──────────────────────────────────────────────────────────────────
 COPY start_marimo.sh /start_marimo.sh
 RUN chmod +x /start_marimo.sh
+
+EXPOSE 2971
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD curl -f http://localhost:2971/ || exit 1
 
 CMD ["/start_marimo.sh"]
