@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Pod startup no longer delegates to the base image's `/start.sh`.
+  SSH setup (via `PUBLIC_KEY`) and the `/pre_start.sh` / `/post_start.sh` user hooks are now handled directly in `start_marimo.sh`, eliminating a 2-second race window and preventing the base image from silently starting Jupyter on port 8888 if `JUPYTER_PASSWORD` is set.
+
 ## [0.3.1] - 2026-04-16
 
 ### Added

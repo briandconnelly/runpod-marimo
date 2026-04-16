@@ -1,10 +1,30 @@
 #!/bin/bash
+set -u
 
-# Start Runpod base infrastructure (SSH, environment setup, etc.) in the background.
-# This preserves SSH access and Runpod-specific environment initialization.
-if [ -f /start.sh ]; then
-    bash /start.sh &
-    sleep 2
+# Optional user hook that runs before services (SSH, env forwarding) start.
+if [[ -f /pre_start.sh ]]; then
+    echo "Running /pre_start.sh..."
+    bash /pre_start.sh
+fi
+
+# If the pod was launched with a PUBLIC_KEY (standard Runpod convention),
+# authorize it for root and start sshd. DSA is intentionally omitted — it is
+# deprecated since OpenSSH 7.0 and unavailable in recent releases.
+if [[ -n "${PUBLIC_KEY:-}" ]]; then
+    echo "Setting up SSH..."
+    mkdir -p /root/.ssh
+    printf '%s\n' "$PUBLIC_KEY" >> /root/.ssh/authorized_keys
+    chmod 700 /root/.ssh
+    chmod 600 /root/.ssh/authorized_keys
+
+    for keytype in rsa ecdsa ed25519; do
+        keyfile="/etc/ssh/ssh_host_${keytype}_key"
+        if [[ ! -f "$keyfile" ]]; then
+            ssh-keygen -t "$keytype" -f "$keyfile" -q -N ''
+        fi
+    done
+
+    service ssh start
 fi
 
 # Forward container environment variables to the runpod user's login shell.
@@ -36,6 +56,12 @@ install -o root -g runpod -m 0640 /dev/null "$POD_ENV_FILE" || {
     exit 1
 }
 _forward_env > "$POD_ENV_FILE"
+
+# Optional user hook that runs after services are up and before marimo starts.
+if [[ -f /post_start.sh ]]; then
+    echo "Running /post_start.sh..."
+    bash /post_start.sh
+fi
 
 # Workspace directory opened in the marimo file browser.
 WORKSPACE="${MARIMO_WORKSPACE:-/home/runpod/workspace}"
