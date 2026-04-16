@@ -6,7 +6,14 @@
 ARG CUDA_BASE_TAG=13.0.3-runtime-ubuntu24.04
 # renovate: datasource=docker depName=ubuntu
 ARG UBUNTU_BASE_TAG=24.04
+# renovate: datasource=docker depName=ghcr.io/astral-sh/uv
+ARG UV_VERSION=0.11.7
 ARG VARIANT=gpu
+
+# Named stage for the uv binary distribution. A named stage is used rather
+# than `COPY --from=ghcr.io/astral-sh/uv:${UV_VERSION}` because BuildKit does
+# not reliably expand ARGs in the image reference of a COPY --from.
+FROM ghcr.io/astral-sh/uv:${UV_VERSION} AS uv-dist
 
 FROM nvidia/cuda:${CUDA_BASE_TAG} AS base-gpu
 FROM ubuntu:${UBUNTU_BASE_TAG} AS base-cpu
@@ -55,11 +62,9 @@ RUN apt-get update --yes && \
     && rm -rf /var/lib/apt/lists/*
 
 # ── uv ───────────────────────────────────────────────────────────────────────
-# Copy the uv and uvx binaries from the official image. This pins an exact
-# version for reproducibility and avoids an install script at build time.
-# renovate: datasource=docker depName=ghcr.io/astral-sh/uv
-ARG UV_VERSION=0.11.7
-COPY --from=ghcr.io/astral-sh/uv:${UV_VERSION} /uv /uvx /usr/local/bin/
+# Copy the uv and uvx binaries from the named uv-dist stage above. Pins an
+# exact version for reproducibility and avoids an install script at build time.
+COPY --from=uv-dist /uv /uvx /usr/local/bin/
 
 # ── GitHub CLI ───────────────────────────────────────────────────────────────
 RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
