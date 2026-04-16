@@ -5,7 +5,9 @@
     {
       "customType": "regex",
       "description": "Dockerfile ARG versions annotated with renovate comments",
-      "fileMatch": ["(^|/)Dockerfile$"],
+      "managerFilePatterns": [
+        "/(^|/)Dockerfile$/"
+      ],
       "matchStrings": [
         "#\\s*renovate:\\s*datasource=(?<datasource>\\S+)\\s+depName=(?<depName>\\S+)(?:\\s+versioning=(?<versioning>\\S+))?\\nARG\\s+\\w+=(?<currentValue>\\S+)"
       ]
