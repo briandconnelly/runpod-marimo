@@ -7,6 +7,25 @@ if [ -f /start.sh ]; then
     sleep 2
 fi
 
+# Forward container environment variables to the runpod user's login shell.
+# `su -l` (used below) starts a clean login shell that discards the parent
+# process's environment. Env vars set by users when configuring their Runpod
+# pod would otherwise be invisible to marimo. Writing them to a profile.d
+# script (sorted last via the 99- prefix) ensures they are available and can
+# override earlier defaults set at build time.
+_forward_env() {
+    while IFS= read -r -d '' entry; do
+        local key="${entry%%=*}"
+        local value="${entry#*=}"
+        case "$key" in
+            # System variables managed by the login shell itself
+            HOME|USER|LOGNAME|SHELL|TERM|PATH|SHLVL|PWD|OLDPWD|_|HOSTNAME) continue ;;
+        esac
+        printf "export %s=%q\n" "$key" "$value"
+    done < <(env -0)
+}
+_forward_env > /etc/profile.d/99-pod-env.sh
+
 # Workspace directory opened in the marimo file browser.
 WORKSPACE="${MARIMO_WORKSPACE:-/home/runpod/workspace}"
 
