@@ -23,7 +23,7 @@ FROM base-${VARIANT}
 ARG VARIANT
 ARG IMAGE_VERSION=dev
 ARG IMAGE_DESCRIPTION="Marimo notebook server for Runpod GPU pods"
-ARG PYTHON_VERSION=3.12
+ARG PYTHON_VERSION=3.12.13
 # renovate: datasource=pypi depName=marimo
 ARG MARIMO_VERSION=0.23.1
 # renovate: datasource=pypi depName=huggingface_hub
@@ -127,8 +127,9 @@ RUN printf 'export UV=/usr/local/bin/uv\nexport UV_PYTHON_INSTALL_DIR=/opt/uv-py
         "${MARIMO_VERSION}" > /etc/profile.d/runpod-env.sh
 
 # ── Python ───────────────────────────────────────────────────────────────────
-# uv manages CPython; no system python3 is installed. Pre-warming avoids
-# first-launch download latency and makes the Python version deterministic.
+# uv manages CPython; no system python3 is installed. PYTHON_VERSION is
+# pinned to a full patch release so successive builds of the same image tag
+# resolve to the same interpreter; bump it explicitly to take patch updates.
 RUN mkdir -p /opt/uv-python && \
     uv python install ${PYTHON_VERSION} && \
     chmod -R a+rX /opt/uv-python
