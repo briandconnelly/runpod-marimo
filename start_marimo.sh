@@ -60,8 +60,9 @@ _forward_env() {
             HOME|USER|LOGNAME|SHELL|TERM|PATH|SHLVL|PWD|OLDPWD|_|HOSTNAME) continue ;;
             # Bash readonly variables that would error on re-export
             BASHOPTS|SHELLOPTS) continue ;;
-            # Consumed during SSH setup; no reason to expose in the login shell
-            PUBLIC_KEY) continue ;;
+            # Consumed at boot by SSH setup / unused Jupyter hook; both are
+            # credentials or startup-only and have no use in the notebook env.
+            PUBLIC_KEY|JUPYTER_PASSWORD) continue ;;
         esac
         # Skip entries that aren't valid shell identifiers (e.g. BASH_FUNC_*%%)
         [[ "$key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || continue
