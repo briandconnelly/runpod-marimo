@@ -23,7 +23,7 @@ FROM base-${VARIANT}
 ARG VARIANT
 ARG IMAGE_VERSION=dev
 ARG IMAGE_DESCRIPTION="Marimo notebook server for Runpod GPU pods"
-ARG PYTHON_VERSION=3.12.13
+ARG PYTHON_VERSION=3.13.13
 # renovate: datasource=pypi depName=marimo
 ARG MARIMO_VERSION=0.23.1
 # renovate: datasource=pypi depName=huggingface_hub
