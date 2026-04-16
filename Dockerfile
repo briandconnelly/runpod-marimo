@@ -4,8 +4,11 @@ FROM ${BASE_IMAGE}
 ARG IMAGE_VERSION=dev
 ARG VARIANT=gpu
 ARG IMAGE_DESCRIPTION="Marimo notebook server for Runpod GPU pods"
+# renovate: datasource=pypi depName=marimo
 ARG MARIMO_VERSION=0.23.1
+# renovate: datasource=pypi depName=huggingface_hub
 ARG HUGGINGFACE_HUB_VERSION=1.10.2
+# renovate: datasource=pypi depName=ty
 ARG TY_VERSION=0.0.31
 
 LABEL org.opencontainers.image.title="runpod-marimo" \
@@ -44,6 +47,7 @@ RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
     rm -rf /var/lib/apt/lists/*
 
 # ── DuckDB CLI ───────────────────────────────────────────────────────────────
+# renovate: datasource=github-releases depName=duckdb/duckdb
 ARG DUCKDB_VERSION=v1.5.2
 ARG DUCKDB_SHA256=fc9145affabca627431e73ddaf6b8117e5c192692480c13886f227be202d5d15
 RUN curl -fsSL "https://github.com/duckdb/duckdb/releases/download/${DUCKDB_VERSION}/duckdb_cli-linux-amd64.zip" \
@@ -54,6 +58,7 @@ RUN curl -fsSL "https://github.com/duckdb/duckdb/releases/download/${DUCKDB_VERS
     rm /tmp/duckdb.zip
 
 # ── runpodctl ────────────────────────────────────────────────────────────────
+# renovate: datasource=github-releases depName=runpod/runpodctl
 ARG RUNPODCTL_VERSION=v2.1.9
 ARG RUNPODCTL_SHA256=777c0475f9966b341af2c4cc17a3c730a2a2655aa0e14c86bb9929cca89846a5
 RUN curl -fsSL "https://github.com/runpod/runpodctl/releases/download/${RUNPODCTL_VERSION}/runpodctl-linux-amd64" \
