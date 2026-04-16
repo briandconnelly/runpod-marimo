@@ -9,8 +9,8 @@ The image is published in two variants from a single Dockerfile:
 
 | Variant | Base image | Tag examples |
 |---|---|---|
-| GPU | `runpod/base:1.0.3-cuda1300-ubuntu2404` | `0.3.0`, `0.3`, `0.3.0-gpu`, `0.3-gpu` |
-| CPU | `runpod/base:1.0.3-ubuntu2404` | `0.3.0-cpu`, `0.3-cpu` |
+| GPU | `nvidia/cuda:*-runtime-ubuntu24.04` | `0.3.0`, `0.3`, `0.3.0-gpu`, `0.3-gpu` |
+| CPU | `ubuntu:24.04` | `0.3.0-cpu`, `0.3-cpu` |
 
 Bare version tags (without a `-gpu` or `-cpu` suffix) resolve to the GPU variant.
 
@@ -51,7 +51,6 @@ docker build -t runpod-marimo:gpu .
 
 # CPU
 docker build -t runpod-marimo:cpu \
-  --build-arg BASE_IMAGE=runpod/base:1.0.3-ubuntu2404 \
   --build-arg VARIANT=cpu \
   --build-arg "IMAGE_DESCRIPTION=Marimo notebook server for Runpod CPU pods" .
 ```

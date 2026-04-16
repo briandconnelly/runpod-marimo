@@ -23,7 +23,6 @@ jobs:
       matrix:
         include:
           - variant: gpu
-            base_image: "runpod/base:1.0.3-cuda1300-ubuntu2404"
             description: "Marimo notebook server for Runpod GPU pods"
             tags: |
               type=semver,pattern={{version}}
@@ -31,7 +30,6 @@ jobs:
               type=semver,pattern={{version}},suffix=-gpu
               type=semver,pattern={{major}}.{{minor}},suffix=-gpu
           - variant: cpu
-            base_image: "runpod/base:1.0.3-ubuntu2404"
             description: "Marimo notebook server for Runpod CPU pods"
             tags: |
               type=semver,pattern={{version}},suffix=-cpu
@@ -67,7 +65,6 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
-            BASE_IMAGE=${{ matrix.base_image }}
             VARIANT=${{ matrix.variant }}
             IMAGE_DESCRIPTION=${{ matrix.description }}
             IMAGE_VERSION=${{ steps.meta.outputs.version }}

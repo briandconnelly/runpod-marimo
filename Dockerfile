@@ -1,9 +1,22 @@
-ARG BASE_IMAGE=runpod/base:1.0.3-cuda1300-ubuntu2404
-FROM ${BASE_IMAGE}
-
-ARG IMAGE_VERSION=dev
+# ── Base image selection ─────────────────────────────────────────────────────
+# GPU variant: upstream NVIDIA CUDA runtime on Ubuntu 24.04
+# CPU variant: plain Ubuntu 24.04
+# VARIANT is passed at build time; the matching base stage is selected below.
+# renovate: datasource=docker depName=nvidia/cuda
+ARG CUDA_BASE_TAG=13.0.3-runtime-ubuntu24.04
+# renovate: datasource=docker depName=ubuntu
+ARG UBUNTU_BASE_TAG=24.04
 ARG VARIANT=gpu
+
+FROM nvidia/cuda:${CUDA_BASE_TAG} AS base-gpu
+FROM ubuntu:${UBUNTU_BASE_TAG} AS base-cpu
+FROM base-${VARIANT}
+
+# Re-declare ARGs that need to be visible after the final FROM.
+ARG VARIANT
+ARG IMAGE_VERSION=dev
 ARG IMAGE_DESCRIPTION="Marimo notebook server for Runpod GPU pods"
+ARG PYTHON_VERSION=3.12
 # renovate: datasource=pypi depName=marimo
 ARG MARIMO_VERSION=0.23.1
 # renovate: datasource=pypi depName=huggingface_hub
@@ -20,9 +33,13 @@ LABEL org.opencontainers.image.title="runpod-marimo" \
 ENV PYTHONUNBUFFERED=1
 
 # ── System packages ──────────────────────────────────────────────────────────
-# jq is retained as a general-purpose interactive tool in the container
+# ca-certificates + curl are required for the tool downloads below.
+# openssh-server provides sshd and the /etc/init.d/ssh script used by
+# start_marimo.sh when PUBLIC_KEY is set.
+# jq is retained as a general-purpose interactive tool in the container.
 RUN apt-get update --yes && \
     DEBIAN_FRONTEND=noninteractive apt-get install --yes --no-install-recommends \
+        ca-certificates \
         git \
         curl \
         wget \
@@ -30,11 +47,19 @@ RUN apt-get update --yes && \
         jq \
         tmux \
         nodejs \
+        openssh-server \
         unzip \
     && if [ "${VARIANT}" = "gpu" ]; then \
         DEBIAN_FRONTEND=noninteractive apt-get install --yes --no-install-recommends nvtop; \
     fi \
     && rm -rf /var/lib/apt/lists/*
+
+# ── uv ───────────────────────────────────────────────────────────────────────
+# Copy the uv and uvx binaries from the official image. This pins an exact
+# version for reproducibility and avoids an install script at build time.
+# renovate: datasource=docker depName=ghcr.io/astral-sh/uv
+ARG UV_VERSION=0.11.7
+COPY --from=ghcr.io/astral-sh/uv:${UV_VERSION} /uv /uvx /usr/local/bin/
 
 # ── GitHub CLI ───────────────────────────────────────────────────────────────
 RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
@@ -81,19 +106,27 @@ RUN mkdir -p /home/runpod/workspace /home/runpod/.config/marimo && \
 
 # ── Runtime environment overrides ────────────────────────────────────────────
 # UV: explicit path so marimo can find uv for in-notebook package installation.
-# UV_CACHE_DIR / HF_HOME: the base image sets these to /workspace paths that
-# are root-owned and not writable by the runpod user when no volume is mounted.
-# Override both to user-owned locations so they work regardless of whether
-# /workspace is mounted.
+# UV_PYTHON_INSTALL_DIR: shared system location for uv-managed Python
+# interpreters so the same install is visible to root and the runpod user.
+# UV_CACHE_DIR / HF_HOME: user-owned locations that work regardless of
+# whether /workspace is mounted.
 #
 # NOTE: Docker ENV is not inherited by login shells (su -l). We write these
 # to /etc/profile.d/ so they are available to all login shells as well.
-ENV UV=/usr/bin/uv \
+ENV UV=/usr/local/bin/uv \
+    UV_PYTHON_INSTALL_DIR=/opt/uv-python \
     UV_CACHE_DIR=/home/runpod/.cache/uv \
     HF_HOME=/home/runpod/.cache/huggingface \
     MARIMO_VERSION=${MARIMO_VERSION}
-RUN printf 'export UV=/usr/bin/uv\nexport UV_CACHE_DIR=/home/runpod/.cache/uv\nexport HF_HOME=/home/runpod/.cache/huggingface\nexport MARIMO_VERSION=%s\nexport PATH="/home/runpod/.local/bin:$PATH"\n' \
+RUN printf 'export UV=/usr/local/bin/uv\nexport UV_PYTHON_INSTALL_DIR=/opt/uv-python\nexport UV_CACHE_DIR=/home/runpod/.cache/uv\nexport HF_HOME=/home/runpod/.cache/huggingface\nexport MARIMO_VERSION=%s\nexport PATH="/home/runpod/.local/bin:$PATH"\n' \
         "${MARIMO_VERSION}" > /etc/profile.d/runpod-env.sh
+
+# ── Python ───────────────────────────────────────────────────────────────────
+# uv manages CPython; no system python3 is installed. Pre-warming avoids
+# first-launch download latency and makes the Python version deterministic.
+RUN mkdir -p /opt/uv-python && \
+    uv python install ${PYTHON_VERSION} && \
+    chmod -R a+rX /opt/uv-python
 
 # ── Python tools ─────────────────────────────────────────────────────────────
 # huggingface_hub is installed as an isolated uv tool for the runpod user.
