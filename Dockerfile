@@ -20,8 +20,10 @@ FROM ubuntu:${UBUNTU_BASE_TAG} AS base-cpu
 FROM base-${VARIANT}
 
 # Re-declare ARGs that need to be visible after the final FROM.
+# IMAGE_VERSION is intentionally declared and consumed at the bottom of the
+# stage so a version bump only invalidates the final LABEL layer instead of
+# everything downstream of it.
 ARG VARIANT
-ARG IMAGE_VERSION=dev
 ARG IMAGE_DESCRIPTION="Marimo notebook server for Runpod GPU pods"
 ARG PYTHON_VERSION=3.13.13
 # renovate: datasource=pypi depName=marimo
@@ -33,8 +35,7 @@ ARG TY_VERSION=0.0.31
 
 LABEL org.opencontainers.image.title="runpod-marimo" \
       org.opencontainers.image.description="${IMAGE_DESCRIPTION}" \
-      org.opencontainers.image.authors="brian.connelly@runpod.io" \
-      org.opencontainers.image.version="${IMAGE_VERSION}"
+      org.opencontainers.image.authors="brian.connelly@runpod.io"
 
 # Ensure Python output is immediately flushed to logs
 ENV PYTHONUNBUFFERED=1
@@ -152,5 +153,10 @@ EXPOSE 2971
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
     CMD curl -f http://localhost:2971/ || exit 1
+
+# Version label is set last so release bumps of IMAGE_VERSION only invalidate
+# the metadata layer, leaving the expensive apt/uv/Python layers cached.
+ARG IMAGE_VERSION=dev
+LABEL org.opencontainers.image.version="${IMAGE_VERSION}"
 
 CMD ["/start_marimo.sh"]
