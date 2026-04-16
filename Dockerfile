@@ -98,7 +98,8 @@ RUN su -l runpod -c "uv tool install huggingface_hub==${HUGGINGFACE_HUB_VERSION}
 
 # ── Marimo config ────────────────────────────────────────────────────────────
 COPY marimo.toml /home/runpod/.config/marimo/marimo.toml
-RUN chown runpod:runpod /home/runpod/.config/marimo/marimo.toml
+COPY runpod.css /home/runpod/.config/marimo/runpod.css
+RUN chown -R runpod:runpod /home/runpod/.config/marimo
 
 # ── Startup ──────────────────────────────────────────────────────────────────
 COPY start_marimo.sh /start_marimo.sh

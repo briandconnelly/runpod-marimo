@@ -1,3 +1,7 @@
+[display]
+theme = "light"
+custom_css = ["/home/runpod/.config/marimo/runpod.css"]
+
 [package_management]
 manager = "uv"
 

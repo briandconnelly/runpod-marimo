@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Custom Runpod-branded theme with Manrope font and Runpod purple accent colors, applied globally to all notebooks (supports both light and dark modes)
+
 ## [0.3.0] - 2026-04-15
 
 ### Added

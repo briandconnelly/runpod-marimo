@@ -1,0 +1,83 @@
+/* Runpod branded theme for marimo
+ *
+ * Professional accent: Runpod purple on clean neutral backgrounds.
+ * Both light and dark modes are fully branded.
+ *
+ * Purple palette:
+ *   #100433  #1B0656  #5D29F0  #874BFF  #AE6DFF  #D58EFF  #FCB1FF
+ */
+
+/* ── Fonts ──────────────────────────────────────────────────────────────────── */
+@import url("https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300..800&family=Manrope:wght@200..800&display=swap");
+
+/* ── Typography & radius ────────────────────────────────────────────────────── */
+:root {
+    --monospace-font: "JetBrains Mono", monospace;
+    --text-font: "Manrope", sans-serif;
+    --heading-font: "Manrope", sans-serif;
+    --radius: 8px;
+}
+
+/* ── Color palette ──────────────────────────────────────────────────────────── */
+:root {
+    /* Backgrounds */
+    --background: light-dark(#ffffff, #0e0b1a);
+    --background-darker: light-dark(#f8f7fc, #090714);
+    --foreground: light-dark(#1a1625, #e6e1f0);
+
+    /* Muted / secondary text */
+    --muted: light-dark(#f3f1f9, #1a1530);
+    --muted-foreground: light-dark(#71687d, #908ca0);
+
+    /* Cards & popovers */
+    --card: light-dark(#ffffff, #161230);
+    --card-foreground: light-dark(#1a1625, #dbd6e8);
+    --popover: light-dark(#ffffff, #161230);
+    --popover-foreground: light-dark(#1a1625, #dbd6e8);
+
+    /* Borders & inputs */
+    --border: light-dark(#e8e4f0, #2a2445);
+    --input: light-dark(#e0dce8, #221d3a);
+
+    /* Primary — Runpod purple */
+    --primary: light-dark(#5D29F0, #874BFF);
+    --primary-foreground: #ffffff;
+
+    /* Secondary */
+    --secondary: light-dark(#f3f0ff, #1a1530);
+    --secondary-foreground: light-dark(#1B0656, #e6e1f0);
+
+    /* Accent */
+    --accent: light-dark(#ede8ff, #251d45);
+    --accent-foreground: light-dark(#5D29F0, #D58EFF);
+
+    /* Focus ring */
+    --ring: light-dark(#874BFF, #AE6DFF);
+
+    /* Links */
+    --link: light-dark(#5D29F0, #AE6DFF);
+    --link-visited: light-dark(#874BFF, #D58EFF);
+
+    /* Semantic colors */
+    --destructive: hsl(0deg 100% 70%);
+    --destructive-foreground: hsl(0deg 0% 100%);
+    --error: hsl(0deg 77% 64%);
+    --error-foreground: hsl(0deg 0% 100%);
+    --success: hsl(142deg 71% 45%);
+    --success-foreground: hsl(0deg 0% 100%);
+    --action: light-dark(#5D29F0, #874BFF);
+    --action-hover: light-dark(#874BFF, #AE6DFF);
+    --action-foreground: #ffffff;
+    --stale: hsl(42deg 56% 44% / 25%);
+
+    /* Shadows */
+    --base-shadow: light-dark(
+        hsl(260deg 20% 60% / 12%),
+        hsl(260deg 40% 4% / 40%)
+    );
+    --base-shadow-darker: light-dark(
+        hsl(260deg 20% 40% / 20%),
+        hsl(260deg 40% 4% / 60%)
+    );
+    --base-shadow-opacity: 5%;
+}
