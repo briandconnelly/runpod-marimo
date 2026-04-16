@@ -20,11 +20,17 @@ _forward_env() {
         case "$key" in
             # System variables managed by the login shell itself
             HOME|USER|LOGNAME|SHELL|TERM|PATH|SHLVL|PWD|OLDPWD|_|HOSTNAME) continue ;;
+            # Bash readonly variables that would error on re-export
+            BASHOPTS|SHELLOPTS) continue ;;
         esac
+        # Skip entries that aren't valid shell identifiers (e.g. BASH_FUNC_*%%)
+        [[ "$key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || continue
         printf "export %s=%q\n" "$key" "$value"
     done < <(env -0)
 }
-_forward_env > /etc/profile.d/99-pod-env.sh
+POD_ENV_FILE="/etc/profile.d/99-pod-env.sh"
+install -o root -g runpod -m 0640 /dev/null "$POD_ENV_FILE"
+_forward_env > "$POD_ENV_FILE"
 
 # Workspace directory opened in the marimo file browser.
 WORKSPACE="${MARIMO_WORKSPACE:-/home/runpod/workspace}"
