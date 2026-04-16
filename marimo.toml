@@ -1,2 +1,8 @@
+[package_management]
+manager = "uv"
+
+[language_servers.ty]
+enabled = true
+
 [mcp]
 presets = ["marimo"]

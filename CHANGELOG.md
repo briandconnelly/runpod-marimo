@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-04-15
+
+### Added
+
+- Marimo is now launched with `--sandbox`, which runs each notebook in an isolated `uv` environment built from its [PEP 723](https://peps.python.org/pep-0723/) inline script metadata, ensuring every notebook is fully reproducible
+- `ty` is now used as the LSP backend for in-editor type checking, powered by Astral's type checker
+- DuckDB CLI (`duckdb`) is now included as a system tool for querying files from the terminal
+- SHA256 checksum verification for DuckDB and runpodctl binary downloads
+- CI workflow that validates the Docker build on pull requests
+
+### Changed
+
+- Marimo, huggingface_hub, and ty are now pinned to explicit versions (`0.23.1`, `1.10.2`, `0.0.31`) for deterministic, reproducible builds
+- `runpod` user sudo access is now scoped to `apt-get` and `apt` instead of unrestricted `NOPASSWD:ALL`
+
 ## [0.1.1] - 2026-04-15
 
 ### Added
