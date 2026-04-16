@@ -1,10 +1,46 @@
 #!/bin/bash
+set -u
 
-# Start Runpod base infrastructure (SSH, environment setup, etc.) in the background.
-# This preserves SSH access and Runpod-specific environment initialization.
-if [ -f /start.sh ]; then
-    bash /start.sh &
-    sleep 2
+# Optional user hook that runs before services (SSH, env forwarding) start.
+# Treated as a required setup step: any failure aborts startup.
+if [[ -f /pre_start.sh ]]; then
+    echo "Running /pre_start.sh..."
+    if ! bash /pre_start.sh; then
+        echo "Error: /pre_start.sh failed; aborting startup." >&2
+        exit 1
+    fi
+fi
+
+# If the pod was launched with a PUBLIC_KEY (standard Runpod convention),
+# authorize it for root and start sshd. DSA is intentionally omitted — it is
+# deprecated since OpenSSH 7.0 and unavailable in recent releases.
+# SSH failures abort: a user who provided PUBLIC_KEY expects to be able to
+# SSH in, so silent failure would be worse than an explicit exit.
+if [[ -n "${PUBLIC_KEY:-}" ]]; then
+    echo "Setting up SSH..."
+    mkdir -p /root/.ssh
+    # Idempotent: avoid duplicate entries across pod stop/start cycles.
+    touch /root/.ssh/authorized_keys
+    if ! grep -Fxq -- "$PUBLIC_KEY" /root/.ssh/authorized_keys; then
+        printf '%s\n' "$PUBLIC_KEY" >> /root/.ssh/authorized_keys
+    fi
+    chmod 700 /root/.ssh
+    chmod 600 /root/.ssh/authorized_keys
+
+    for keytype in rsa ecdsa ed25519; do
+        keyfile="/etc/ssh/ssh_host_${keytype}_key"
+        if [[ ! -f "$keyfile" ]]; then
+            if ! ssh-keygen -t "$keytype" -f "$keyfile" -q -N ''; then
+                echo "Error: failed to generate SSH host key '$keyfile'" >&2
+                exit 1
+            fi
+        fi
+    done
+
+    if ! service ssh start; then
+        echo "Error: failed to start sshd after PUBLIC_KEY was provided" >&2
+        exit 1
+    fi
 fi
 
 # Forward container environment variables to the runpod user's login shell.
@@ -24,6 +60,9 @@ _forward_env() {
             HOME|USER|LOGNAME|SHELL|TERM|PATH|SHLVL|PWD|OLDPWD|_|HOSTNAME) continue ;;
             # Bash readonly variables that would error on re-export
             BASHOPTS|SHELLOPTS) continue ;;
+            # Consumed at boot by SSH setup / unused Jupyter hook; both are
+            # credentials or startup-only and have no use in the notebook env.
+            PUBLIC_KEY|JUPYTER_PASSWORD) continue ;;
         esac
         # Skip entries that aren't valid shell identifiers (e.g. BASH_FUNC_*%%)
         [[ "$key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || continue
@@ -35,7 +74,20 @@ install -o root -g runpod -m 0640 /dev/null "$POD_ENV_FILE" || {
     echo "Failed to create $POD_ENV_FILE with secure permissions" >&2
     exit 1
 }
-_forward_env > "$POD_ENV_FILE"
+if ! _forward_env > "$POD_ENV_FILE"; then
+    echo "Failed to write forwarded environment to $POD_ENV_FILE" >&2
+    exit 1
+fi
+
+# Optional user hook that runs after services are up and before marimo starts.
+# Failures are logged but do not block marimo startup — a post-start hook that
+# breaks should not prevent the notebook server from coming up.
+if [[ -f /post_start.sh ]]; then
+    echo "Running /post_start.sh..."
+    if ! bash /post_start.sh; then
+        echo "Warning: /post_start.sh failed; continuing to start marimo." >&2
+    fi
+fi
 
 # Workspace directory opened in the marimo file browser.
 WORKSPACE="${MARIMO_WORKSPACE:-/home/runpod/workspace}"
