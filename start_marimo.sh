@@ -2,29 +2,45 @@
 set -u
 
 # Optional user hook that runs before services (SSH, env forwarding) start.
+# Treated as a required setup step: any failure aborts startup.
 if [[ -f /pre_start.sh ]]; then
     echo "Running /pre_start.sh..."
-    bash /pre_start.sh
+    if ! bash /pre_start.sh; then
+        echo "Error: /pre_start.sh failed; aborting startup." >&2
+        exit 1
+    fi
 fi
 
 # If the pod was launched with a PUBLIC_KEY (standard Runpod convention),
 # authorize it for root and start sshd. DSA is intentionally omitted — it is
 # deprecated since OpenSSH 7.0 and unavailable in recent releases.
+# SSH failures abort: a user who provided PUBLIC_KEY expects to be able to
+# SSH in, so silent failure would be worse than an explicit exit.
 if [[ -n "${PUBLIC_KEY:-}" ]]; then
     echo "Setting up SSH..."
     mkdir -p /root/.ssh
-    printf '%s\n' "$PUBLIC_KEY" >> /root/.ssh/authorized_keys
+    # Idempotent: avoid duplicate entries across pod stop/start cycles.
+    touch /root/.ssh/authorized_keys
+    if ! grep -Fxq -- "$PUBLIC_KEY" /root/.ssh/authorized_keys; then
+        printf '%s\n' "$PUBLIC_KEY" >> /root/.ssh/authorized_keys
+    fi
     chmod 700 /root/.ssh
     chmod 600 /root/.ssh/authorized_keys
 
     for keytype in rsa ecdsa ed25519; do
         keyfile="/etc/ssh/ssh_host_${keytype}_key"
         if [[ ! -f "$keyfile" ]]; then
-            ssh-keygen -t "$keytype" -f "$keyfile" -q -N ''
+            if ! ssh-keygen -t "$keytype" -f "$keyfile" -q -N ''; then
+                echo "Error: failed to generate SSH host key '$keyfile'" >&2
+                exit 1
+            fi
         fi
     done
 
-    service ssh start
+    if ! service ssh start; then
+        echo "Error: failed to start sshd after PUBLIC_KEY was provided" >&2
+        exit 1
+    fi
 fi
 
 # Forward container environment variables to the runpod user's login shell.
@@ -58,9 +74,13 @@ install -o root -g runpod -m 0640 /dev/null "$POD_ENV_FILE" || {
 _forward_env > "$POD_ENV_FILE"
 
 # Optional user hook that runs after services are up and before marimo starts.
+# Failures are logged but do not block marimo startup — a post-start hook that
+# breaks should not prevent the notebook server from coming up.
 if [[ -f /post_start.sh ]]; then
     echo "Running /post_start.sh..."
-    bash /post_start.sh
+    if ! bash /post_start.sh; then
+        echo "Warning: /post_start.sh failed; continuing to start marimo." >&2
+    fi
 fi
 
 # Workspace directory opened in the marimo file browser.
