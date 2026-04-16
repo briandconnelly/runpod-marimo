@@ -18,6 +18,25 @@ jobs:
       contents: read
       packages: write
 
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - variant: gpu
+            base_image: "runpod/base:1.0.3-cuda1300-ubuntu2404"
+            description: "Marimo notebook server for Runpod GPU pods"
+            tags: |
+              type=semver,pattern={{version}}
+              type=semver,pattern={{major}}.{{minor}}
+              type=semver,pattern={{version}},suffix=-gpu
+              type=semver,pattern={{major}}.{{minor}},suffix=-gpu
+          - variant: cpu
+            base_image: "runpod/base:1.0.3-ubuntu2404"
+            description: "Marimo notebook server for Runpod CPU pods"
+            tags: |
+              type=semver,pattern={{version}},suffix=-cpu
+              type=semver,pattern={{major}}.{{minor}},suffix=-cpu
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -37,11 +56,9 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
+          tags: ${{ matrix.tags }}
 
-      - name: Build and push Docker image
+      - name: Build and push Docker image (${{ matrix.variant }})
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -49,5 +66,10 @@ jobs:
           platforms: linux/amd64
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          build-args: |
+            BASE_IMAGE=${{ matrix.base_image }}
+            VARIANT=${{ matrix.variant }}
+            IMAGE_DESCRIPTION=${{ matrix.description }}
+            IMAGE_VERSION=${{ steps.meta.outputs.version }}
+          cache-from: type=gha,scope=${{ matrix.variant }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.variant }}

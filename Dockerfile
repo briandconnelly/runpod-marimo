@@ -1,12 +1,15 @@
-FROM runpod/base:1.0.3-cuda1300-ubuntu2404
+ARG BASE_IMAGE=runpod/base:1.0.3-cuda1300-ubuntu2404
+FROM ${BASE_IMAGE}
 
 ARG IMAGE_VERSION=dev
+ARG VARIANT=gpu
+ARG IMAGE_DESCRIPTION="Marimo notebook server for Runpod GPU pods"
 ARG MARIMO_VERSION=0.23.1
 ARG HUGGINGFACE_HUB_VERSION=1.10.2
 ARG TY_VERSION=0.0.31
 
 LABEL org.opencontainers.image.title="runpod-marimo" \
-      org.opencontainers.image.description="Marimo notebook server for Runpod GPU pods" \
+      org.opencontainers.image.description="${IMAGE_DESCRIPTION}" \
       org.opencontainers.image.authors="brian.connelly@runpod.io" \
       org.opencontainers.image.version="${IMAGE_VERSION}"
 
@@ -23,9 +26,11 @@ RUN apt-get update --yes && \
         sudo \
         jq \
         tmux \
-        nvtop \
         nodejs \
         unzip \
+    && if [ "${VARIANT}" = "gpu" ]; then \
+        DEBIAN_FRONTEND=noninteractive apt-get install --yes --no-install-recommends nvtop; \
+    fi \
     && rm -rf /var/lib/apt/lists/*
 
 # ── GitHub CLI ───────────────────────────────────────────────────────────────

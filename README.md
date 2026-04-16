@@ -1,7 +1,18 @@
 # runpod-marimo
 
-A Docker image that runs [marimo](https://marimo.io) as a notebook server on [Runpod](https://runpod.io) GPU pods.
+A Docker image that runs [marimo](https://marimo.io) as a notebook server on [Runpod](https://runpod.io) GPU and CPU pods.
 Marimo is served on port **2971** and is accessible via Runpod's web proxy.
+
+## Variants
+
+The image is published in two variants from a single Dockerfile:
+
+| Variant | Base image | Tag examples |
+|---|---|---|
+| GPU | `runpod/base:1.0.3-cuda1300-ubuntu2404` | `0.3.0`, `0.3`, `0.3.0-gpu`, `0.3-gpu` |
+| CPU | `runpod/base:1.0.3-ubuntu2404` | `0.3.0-cpu`, `0.3-cpu` |
+
+Bare version tags (without a `-gpu` or `-cpu` suffix) resolve to the GPU variant.
 
 ## Reproducible notebooks by design
 
@@ -25,7 +36,8 @@ Pre-installing packages would allow imports that work in the pod but have no rec
 - **huggingface_hub** CLI for downloading models and datasets
 - **GitHub CLI** (`gh`) and **runpodctl** for interacting with Runpod and GitHub from the terminal
 - **DuckDB** CLI for querying files from the terminal
-- Standard utilities: `git`, `curl`, `wget`, `jq`, `tmux`, `nvtop`
+- Standard utilities: `git`, `curl`, `wget`, `jq`, `tmux`
+- **nvtop** for GPU monitoring (GPU variant only)
 
 ## Building
 
@@ -34,5 +46,12 @@ Images are built and published to [GitHub Container Registry](https://ghcr.io) a
 To build locally:
 
 ```bash
-docker build -t runpod-marimo .
+# GPU (default)
+docker build -t runpod-marimo:gpu .
+
+# CPU
+docker build -t runpod-marimo:cpu \
+  --build-arg BASE_IMAGE=runpod/base:1.0.3-ubuntu2404 \
+  --build-arg VARIANT=cpu \
+  --build-arg "IMAGE_DESCRIPTION=Marimo notebook server for Runpod CPU pods" .
 ```
