@@ -7,9 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-04-16
+
 ### Added
 
-- `PYTHON_VERSION` build arg selects the CPython version that `uv` installs into the image.
+- `PYTHON_VERSION` build arg selects the CPython version that `uv` installs into the image (Renovate-tracked).
 - `UV_VERSION` build arg pins the `uv` binary copied from `ghcr.io/astral-sh/uv` (Renovate-tracked).
 
 ### Changed
