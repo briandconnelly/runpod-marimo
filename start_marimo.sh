@@ -60,6 +60,8 @@ _forward_env() {
             HOME|USER|LOGNAME|SHELL|TERM|PATH|SHLVL|PWD|OLDPWD|_|HOSTNAME) continue ;;
             # Bash readonly variables that would error on re-export
             BASHOPTS|SHELLOPTS) continue ;;
+            # Consumed during SSH setup; no reason to expose in the login shell
+            PUBLIC_KEY) continue ;;
         esac
         # Skip entries that aren't valid shell identifiers (e.g. BASH_FUNC_*%%)
         [[ "$key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || continue
@@ -71,7 +73,10 @@ install -o root -g runpod -m 0640 /dev/null "$POD_ENV_FILE" || {
     echo "Failed to create $POD_ENV_FILE with secure permissions" >&2
     exit 1
 }
-_forward_env > "$POD_ENV_FILE"
+if ! _forward_env > "$POD_ENV_FILE"; then
+    echo "Failed to write forwarded environment to $POD_ENV_FILE" >&2
+    exit 1
+fi
 
 # Optional user hook that runs after services are up and before marimo starts.
 # Failures are logged but do not block marimo startup — a post-start hook that
