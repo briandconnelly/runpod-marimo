@@ -11,8 +11,10 @@ fi
 # `su -l` (used below) starts a clean login shell that discards the parent
 # process's environment. Env vars set by users when configuring their Runpod
 # pod would otherwise be invisible to marimo. Writing them to a profile.d
-# script (sorted last via the 99- prefix) ensures they are available and can
-# override earlier defaults set at build time.
+# script ensures they are available. The zz- prefix makes it sort after
+# runpod-env.sh so user overrides take precedence over build-time defaults
+# (in C locale, digits sort before letters, so a numeric prefix would not
+# achieve this).
 _forward_env() {
     while IFS= read -r -d '' entry; do
         local key="${entry%%=*}"
@@ -28,8 +30,11 @@ _forward_env() {
         printf "export %s=%q\n" "$key" "$value"
     done < <(env -0)
 }
-POD_ENV_FILE="/etc/profile.d/99-pod-env.sh"
-install -o root -g runpod -m 0640 /dev/null "$POD_ENV_FILE"
+POD_ENV_FILE="/etc/profile.d/zz-pod-env.sh"
+install -o root -g runpod -m 0640 /dev/null "$POD_ENV_FILE" || {
+    echo "Failed to create $POD_ENV_FILE with secure permissions" >&2
+    exit 1
+}
 _forward_env > "$POD_ENV_FILE"
 
 # Workspace directory opened in the marimo file browser.
