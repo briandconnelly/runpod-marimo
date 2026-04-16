@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- CPU variant of the Docker image (`-cpu` tag suffix) using `runpod/base:1.0.3-ubuntu2404`
+- CI now builds and validates both GPU and CPU variants
+
 ## [0.2.0] - 2026-04-15
 
 ### Added

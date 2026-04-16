@@ -2,7 +2,8 @@
 
 ## Project purpose
 
-This repo produces a Docker image that runs [marimo](https://marimo.io) as a notebook server on Runpod GPU pods.
+This repo produces Docker images that run [marimo](https://marimo.io) as a notebook server on Runpod GPU and CPU pods.
+A single Dockerfile is parameterized via build arguments (`BASE_IMAGE`, `VARIANT`) to produce both variants.
 It is used internally by Runpod's team and published publicly as a general-purpose Runpod template, so changes are visible to external users.
 
 ## Core design principle: reproducibility
