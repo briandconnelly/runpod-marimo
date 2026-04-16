@@ -7,6 +7,36 @@ if [ -f /start.sh ]; then
     sleep 2
 fi
 
+# Forward container environment variables to the runpod user's login shell.
+# `su -l` (used below) starts a clean login shell that discards the parent
+# process's environment. Env vars set by users when configuring their Runpod
+# pod would otherwise be invisible to marimo. Writing them to a profile.d
+# script ensures they are available. The zz- prefix makes it sort after
+# runpod-env.sh so user overrides take precedence over build-time defaults
+# (in C locale, digits sort before letters, so a numeric prefix would not
+# achieve this).
+_forward_env() {
+    while IFS= read -r -d '' entry; do
+        local key="${entry%%=*}"
+        local value="${entry#*=}"
+        case "$key" in
+            # System variables managed by the login shell itself
+            HOME|USER|LOGNAME|SHELL|TERM|PATH|SHLVL|PWD|OLDPWD|_|HOSTNAME) continue ;;
+            # Bash readonly variables that would error on re-export
+            BASHOPTS|SHELLOPTS) continue ;;
+        esac
+        # Skip entries that aren't valid shell identifiers (e.g. BASH_FUNC_*%%)
+        [[ "$key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || continue
+        printf "export %s=%q\n" "$key" "$value"
+    done < <(env -0)
+}
+POD_ENV_FILE="/etc/profile.d/zz-pod-env.sh"
+install -o root -g runpod -m 0640 /dev/null "$POD_ENV_FILE" || {
+    echo "Failed to create $POD_ENV_FILE with secure permissions" >&2
+    exit 1
+}
+_forward_env > "$POD_ENV_FILE"
+
 # Workspace directory opened in the marimo file browser.
 WORKSPACE="${MARIMO_WORKSPACE:-/home/runpod/workspace}"
 

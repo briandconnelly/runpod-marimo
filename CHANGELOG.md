@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-04-16
+
+### Added
+
+- Renovate configuration for automated dependency update PRs covering PyPI packages (marimo, huggingface_hub, ty), GitHub release binaries (DuckDB, runpodctl), and GitHub Actions
+
+### Fixed
+
+- Environment variables set by users when configuring a pod are now visible to the marimo notebook session.
+  Previously, `su -l` discarded the container's environment when switching to the `runpod` user, making user-specified env vars invisible to notebooks.
+
 ## [0.3.0] - 2026-04-15
 
 ### Added
