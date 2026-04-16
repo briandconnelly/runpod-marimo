@@ -19,8 +19,10 @@ jobs:
         include:
           - variant: gpu
             base_image: "runpod/base:1.0.3-cuda1300-ubuntu2404"
+            description: "Marimo notebook server for Runpod GPU pods"
           - variant: cpu
             base_image: "runpod/base:1.0.3-ubuntu2404"
+            description: "Marimo notebook server for Runpod CPU pods"
 
     steps:
       - name: Checkout repository
@@ -38,5 +40,6 @@ jobs:
           build-args: |
             BASE_IMAGE=${{ matrix.base_image }}
             VARIANT=${{ matrix.variant }}
+            IMAGE_DESCRIPTION=${{ matrix.description }}
           cache-from: type=gha,scope=${{ matrix.variant }}
           cache-to: type=gha,mode=max,scope=${{ matrix.variant }}
