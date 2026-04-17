@@ -33,7 +33,7 @@ Pre-installing packages would allow imports that work in the pod but have no rec
 
 When `MARIMO_TOKEN_PASSWORD` is set, the value is passed as a CLI argument to marimo and is visible on the process command line (`ps`, `/proc/<pid>/cmdline`) to anyone with shell access on the pod.
 On a single-user Runpod pod this is generally acceptable — the user already has root — but treat it as a second factor layered on top of the Runpod proxy, not a secret hardened against local inspection.
-The value is not written into `/etc/profile.d/` or any user login shell's environment.
+The value is not written into `/etc/profile.d/` and does not appear in SSH sessions or notebook shells.
 
 ## What is included
 
