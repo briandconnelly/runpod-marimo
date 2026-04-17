@@ -117,6 +117,9 @@ if [[ -n "${MARIMO_TOKEN_PASSWORD:-}" ]]; then
 else
     AUTH_FLAG="--no-token"
 fi
+# shellcheck disable=SC2086 # AUTH_FLAG is pre-escaped by printf %q above; the
+# unquoted expansion is intentional so --token-password and its value split
+# into two tokens. Quoting it would pass both as a single argument and break auth.
 MARIMO_ARGS="edit --host 0.0.0.0 --port 2971 ${AUTH_FLAG} --sandbox '${WORKSPACE}'"
 
 # MARIMO_VERSION is set at build time (Dockerfile ARG → ENV → /etc/profile.d/)
