@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.2] - 2026-04-17
+
+### Removed
+
+- `MARIMO_TOKEN_PASSWORD` environment variable and the associated `--token-password` launch mode.
+  Marimo builds its login-redirect `Location` header from the incoming request's `Host`, which Runpod's web proxy sets to an internal overlay address (e.g., `100.65.x.x:60830`) that browsers cannot reach.
+  Pods launched with the variable set got stuck at "Initializing..." in the Runpod console because the proxy probe on `/` received a 303 to an unreachable URL.
+  Marimo's `--proxy` flag does not affect redirect URL construction (and crashes at startup when passed a full URL).
+  Access control reverts to Runpod's proxy gating; users who want a password layer can SSH in and port-forward 2971 locally.
+
+### Fixed
+
+- GPU and CPU pods launched with `MARIMO_TOKEN_PASSWORD` set no longer fail to become reachable through Runpod's web proxy.
+  The feature was removed (see above); without it, marimo returns 200 on `/` and the proxy marks the port Ready.
+
 ## [0.5.1] - 2026-04-17
 
 ### Added
