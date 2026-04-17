@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.3] - 2026-04-17
+
 ### Changed
 
 - `MARIMO_WORKSPACE` now defaults to `/workspace` unconditionally instead of `/home/runpod/workspace`, matching the Runpod convention used by `runpod/base` and other official templates. When a network volume is attached to the pod, it's mounted at `/workspace`, so notebooks persist across pod stop/start by default. When no volume is attached, `/workspace` is a regular container directory (still ephemeral, but at a path users recognize). Users with scripts that hardcode the old path can set `MARIMO_WORKSPACE=/home/runpod/workspace` to restore the previous behavior.
