@@ -58,10 +58,7 @@ fi
 #   1. MARIMO_WORKSPACE if set (user override).
 #   2. /workspace unconditionally, matching Runpod's volume-mount convention.
 #      When no volume is attached /workspace is just a fresh container dir;
-#      install -d creates it on the spot. Ownership of the top-level mount
-#      point is set to the runpod user (non-recursive) so marimo — which
-#      runs unprivileged — can create new files; existing files on a
-#      populated volume keep their owner and mode.
+#      we create it on the spot.
 #
 # Cache root (UV_CACHE_DIR, HF_HOME):
 #   1. Individual UV_CACHE_DIR / HF_HOME if set (fine-grained user override).
@@ -71,26 +68,77 @@ fi
 #   3. <workspace>/.cache, so a user who attaches a volume automatically
 #      gets persistent uv sandbox builds and HF downloads in addition to
 #      their notebooks.
-#
-# This block runs before _forward_env below so the computed cache paths
-# flow into /etc/profile.d/zz-pod-env.sh for login shells.
-WORKSPACE="${MARIMO_WORKSPACE:-/workspace}"
-install -d -o runpod -g runpod "$WORKSPACE"
 
-if [[ -n "${MARIMO_CACHE_DIR:-}" ]]; then
-    CACHE_ROOT="$MARIMO_CACHE_DIR"
-else
-    CACHE_ROOT="${WORKSPACE}/.cache"
-fi
+# Validate the user-supplied path knobs. A misconfigured env var ("/",
+# " ", a relative path, etc.) could otherwise either chown a system
+# path we take ownership of below, or land notebooks somewhere the
+# user can't find them. Requiring absolute paths is a cheap guard.
+_validate_path_var() {
+    local name="$1" value="$2"
+    if [[ -z "$value" || "$value" != /* ]]; then
+        echo "Error: $name must be a non-empty absolute path; got '$value'." >&2
+        exit 1
+    fi
+    case "$value" in
+        /|/bin|/boot|/dev|/etc|/lib|/lib32|/lib64|/proc|/root|/run|/sbin|/sys|/usr|/var)
+            echo "Error: $name refuses to take ownership of system path '$value'." >&2
+            exit 1
+            ;;
+        /bin/*|/boot/*|/dev/*|/etc/*|/lib/*|/lib32/*|/lib64/*|/proc/*|/root/*|/run/*|/sbin/*|/sys/*|/usr/*|/var/*)
+            echo "Error: $name refuses to take ownership of a path under a system directory: '$value'." >&2
+            exit 1
+            ;;
+    esac
+}
+[[ -n "${MARIMO_WORKSPACE:-}" ]] && _validate_path_var MARIMO_WORKSPACE "$MARIMO_WORKSPACE"
+[[ -n "${MARIMO_CACHE_DIR:-}" ]] && _validate_path_var MARIMO_CACHE_DIR "$MARIMO_CACHE_DIR"
+
+# Ensure a directory exists and is owned by the runpod user. Only chowns
+# directories we created on this boot, to avoid changing ownership of
+# a pre-existing user-supplied path (e.g. a populated volume subdir).
+# Special case: /workspace itself is always chown'd because Runpod mounts
+# network volumes there root-owned, and marimo (unprivileged) must be
+# able to write at the top level.
+_ensure_runpod_dir() {
+    local dir="$1"
+    if [[ -d "$dir" ]]; then
+        if [[ "$dir" == "/workspace" ]]; then
+            chown runpod:runpod "$dir" || {
+                echo "Warning: could not chown '$dir' to runpod; marimo may fail to write notebooks." >&2
+            }
+        fi
+    else
+        mkdir -p "$dir" || {
+            echo "Error: failed to create '$dir'." >&2
+            exit 1
+        }
+        chown runpod:runpod "$dir" || {
+            echo "Error: failed to chown '$dir' to runpod." >&2
+            exit 1
+        }
+    fi
+}
+
+WORKSPACE="${MARIMO_WORKSPACE:-/workspace}"
+_ensure_runpod_dir "$WORKSPACE"
+
+CACHE_ROOT="${MARIMO_CACHE_DIR:-${WORKSPACE}/.cache}"
+# These exports are load-bearing — they flow into the parent process's
+# env, get captured by _forward_env below, and from there land in
+# /etc/profile.d/zz-pod-env.sh so marimo's `su -l runpod` login shell
+# (which would otherwise wipe them) picks them up. Do not move this
+# block after _forward_env without re-wiring the propagation.
 export UV_CACHE_DIR="${UV_CACHE_DIR:-$CACHE_ROOT/uv}"
 export HF_HOME="${HF_HOME:-$CACHE_ROOT/huggingface}"
-install -d -o runpod -g runpod "$CACHE_ROOT" "$UV_CACHE_DIR" "$HF_HOME"
+_ensure_runpod_dir "$CACHE_ROOT"
+_ensure_runpod_dir "$UV_CACHE_DIR"
+_ensure_runpod_dir "$HF_HOME"
 
 # Probe that the workspace is actually usable by the runpod user before
-# launching marimo. install -d above should guarantee this, but a network
-# volume with restrictive ACLs, an immutable bit, or a read-only mount
-# can all silently leave us in a state where marimo launches fine but
-# fails to save the first notebook — which is exactly the failure mode
+# launching marimo. The dir-setup above should guarantee this, but a
+# network volume with restrictive ACLs, an immutable bit, or a
+# read-only mount can all leave us in a state where marimo launches
+# fine but fails to save the first notebook — the exact failure mode
 # this image is meant to prevent. Directories need both the write bit
 # and the execute (search) bit for file creation, so check both.
 WORKSPACE_Q_PROBE=$(printf '%q' "$WORKSPACE")

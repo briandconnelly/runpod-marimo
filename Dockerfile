@@ -143,11 +143,14 @@ RUN printf 'export UV=/usr/local/bin/uv\nexport UV_PYTHON_INSTALL_DIR=/opt/uv-py
 # pinned to a full patch release so successive builds of the same image tag
 # resolve to the same interpreter; bump it explicitly to take patch updates.
 #
-# The install runs as the runpod user so uv's cache (UV_CACHE_DIR under
-# /home/runpod) stays user-owned — running as root would make the cache
-# unwritable for the later `uv tool install` step. /opt/uv-python is
-# pre-created and handed to runpod for the duration of the install, then
-# made world-readable so root can still read the interpreter metadata.
+# The install runs as the runpod user so uv's cache (~/.cache/uv →
+# /home/runpod/.cache/uv) stays user-owned — running as root would make
+# the cache unwritable for the later `uv tool install` step. The same
+# location receives the prewarmed `uvx marimo` cache below, which lets
+# pods opting out of persistent caches (MARIMO_CACHE_DIR=/home/runpod/.cache)
+# launch marimo on the first boot without re-downloading. /opt/uv-python
+# is pre-created and handed to runpod for the duration of the install,
+# then made world-readable so root can still read the interpreter metadata.
 RUN install -d -o runpod -g runpod /opt/uv-python && \
     su -l runpod -c "uv python install ${PYTHON_VERSION}" && \
     chmod -R a+rX /opt/uv-python
