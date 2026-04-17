@@ -7,9 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- `MARIMO_WORKSPACE` now defaults to `/workspace` unconditionally instead of `/home/runpod/workspace`, matching the Runpod convention used by `runpod/base` and other official templates. When a network volume is attached to the pod, it's mounted at `/workspace`, so notebooks persist across pod stop/start by default. When no volume is attached, `/workspace` is a regular container directory (still ephemeral, but at a path users recognize). Users with scripts that hardcode the old path can set `MARIMO_WORKSPACE=/home/runpod/workspace` to restore the previous behavior.
+- `uv`'s sandbox cache (`UV_CACHE_DIR`) and the Hugging Face hub cache (`HF_HOME`) now default to `$MARIMO_WORKSPACE/.cache/uv` and `$MARIMO_WORKSPACE/.cache/huggingface`, so downloaded notebook dependencies and model files persist on the network volume alongside the notebooks. Previously both caches were pinned to ephemeral container paths under `/home/runpod/.cache`, which meant every pod rebuild re-downloaded every notebook's deps from scratch. First boot on a volume-attached pod incurs a one-time cost to repopulate the caches; subsequent boots reuse them.
+
+### Added
+
+- `MARIMO_CACHE_DIR` environment variable as a single knob to relocate both the uv and Hugging Face caches (e.g., `MARIMO_CACHE_DIR=/home/runpod/.cache` to keep caches on ephemeral container storage even when a network volume is attached). `UV_CACHE_DIR` and `HF_HOME` can still be set individually to override either cache alone.
+
 ### Fixed
 
-- New notebooks now default to `/workspace` when a Runpod network volume is mounted there, so they survive pod stop/start. Previously the workspace was hardcoded to `/home/runpod/workspace` (ephemeral container state), silently dropping notebooks whenever the pod was rebuilt. `MARIMO_WORKSPACE` still overrides, and pods without a volume fall back to `/home/runpod/workspace`. Ownership of the `/workspace` mount point is set to the `runpod` user at startup (non-recursive, so preexisting files on the volume are untouched) since marimo runs unprivileged.
+- New notebooks created through marimo's file browser now land on the network volume by default when one is attached, so they survive pod stop/start. Previously the workspace was hardcoded to `/home/runpod/workspace` (ephemeral container state), silently dropping notebooks whenever the pod was rebuilt.
+
+### Removed
+
+- `/home/runpod/workspace` is no longer pre-created in the image. The workspace directory is created at runtime by `start_marimo.sh` and tracks `$MARIMO_WORKSPACE` (default `/workspace`). Pods that relied on the old path can set `MARIMO_WORKSPACE=/home/runpod/workspace`.
 
 ## [0.5.2] - 2026-04-17
 

@@ -52,14 +52,40 @@ shared_tests() {
         check "marimo --port 2971"        "[[ '$MARIMO_CMD' == *'--port 2971'* ]]"
         check "marimo --no-token"         "[[ '$MARIMO_CMD' == *--no-token* ]]"
 
-        # The workspace path is the last positional argument to marimo edit.
-        # It determines where new notebooks are created; if it's on a
-        # non-persistent path while a network volume is mounted, users lose
-        # work across pod restarts.
+        # The workspace path is the last positional argument to marimo
+        # edit. It determines where new notebooks are created; if it is
+        # not persisted, notebooks are lost on pod stop/start.
         MARIMO_WS=$(echo "$MARIMO_CMD" | awk '{print $NF}')
         check "marimo workspace writable by runpod" "su -l runpod -c 'test -w $MARIMO_WS'"
-        if [[ -z "${MARIMO_WORKSPACE:-}" && -d /workspace ]]; then
-            check "marimo uses /workspace when mounted" "[[ '$MARIMO_WS' == /workspace ]]"
+        if [[ -z "${MARIMO_WORKSPACE:-}" ]]; then
+            check "marimo defaults workspace to /workspace" "[[ '$MARIMO_WS' == /workspace ]]"
+        fi
+    fi
+
+    section "Cache locations"
+    # Caches should live under the workspace by default so they persist
+    # on a Runpod network volume. MARIMO_CACHE_DIR overrides to a
+    # specific path (common escape hatch: /home/runpod/.cache for
+    # ephemeral container storage). Individual UV_CACHE_DIR / HF_HOME
+    # still win if set explicitly.
+    local MARIMO_ENV_UV MARIMO_ENV_HF EXPECTED_CACHE_ROOT
+    if [[ -n "$MARIMO_PID" ]]; then
+        MARIMO_ENV_UV=$(tr '\0' '\n' < /proc/"$MARIMO_PID"/environ | sed -n 's/^UV_CACHE_DIR=//p')
+        MARIMO_ENV_HF=$(tr '\0' '\n' < /proc/"$MARIMO_PID"/environ | sed -n 's/^HF_HOME=//p')
+        check "marimo has UV_CACHE_DIR set" "test -n '$MARIMO_ENV_UV'"
+        check "marimo has HF_HOME set"      "test -n '$MARIMO_ENV_HF'"
+        if [[ -n "$MARIMO_ENV_UV" ]]; then
+            check "UV_CACHE_DIR is writable by runpod" "su -l runpod -c 'test -w $MARIMO_ENV_UV'"
+        fi
+        if [[ -n "$MARIMO_ENV_HF" ]]; then
+            check "HF_HOME is writable by runpod" "su -l runpod -c 'test -w $MARIMO_ENV_HF'"
+        fi
+        if [[ -z "${UV_CACHE_DIR:-}" && -z "${HF_HOME:-}" ]]; then
+            EXPECTED_CACHE_ROOT="${MARIMO_CACHE_DIR:-$MARIMO_WS/.cache}"
+            check "UV_CACHE_DIR defaults to <cache_root>/uv" \
+                "[[ '$MARIMO_ENV_UV' == '$EXPECTED_CACHE_ROOT/uv' ]]"
+            check "HF_HOME defaults to <cache_root>/huggingface" \
+                "[[ '$MARIMO_ENV_HF' == '$EXPECTED_CACHE_ROOT/huggingface' ]]"
         fi
     fi
 
@@ -88,7 +114,6 @@ shared_tests() {
     section "User and permissions"
     check "runpod user exists"            "id runpod"
     check "home owned by runpod"          "[[ \$(stat -c %U /home/runpod) == runpod ]]"
-    check "workspace exists"              "test -d /home/runpod/workspace"
     check "sudoers drop-in scoped to apt" "grep -qF 'NOPASSWD: /usr/bin/apt-get, /usr/bin/apt' /etc/sudoers.d/runpod"
     check "sudoers drop-in mode 0440"     "[[ \$(stat -c %a /etc/sudoers.d/runpod) == 440 ]]"
 

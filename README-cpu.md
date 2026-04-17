@@ -19,10 +19,15 @@ Pre-installing packages would allow imports that work in the pod but have no rec
 
 | Variable | Description | Default |
 |---|---|---|
-| `MARIMO_WORKSPACE` | Path to open in marimo's file browser | `/workspace` if present (Runpod mounts network volumes there), else `/home/runpod/workspace` |
+| `MARIMO_WORKSPACE` | Path to open in marimo's file browser | `/workspace` |
+| `MARIMO_CACHE_DIR` | Parent directory for uv and Hugging Face caches | `$MARIMO_WORKSPACE/.cache` |
 
-When a network volume is attached to the pod, notebooks are created under `/workspace` by default so they survive pod stop/start.
-Pods without a network volume fall back to the in-container `/home/runpod/workspace`, which is ephemeral.
+`/workspace` is where Runpod mounts network volumes, so notebooks created through the file browser automatically persist across pod stop/start when a volume is attached.
+Without a volume, `/workspace` is a regular container directory (ephemeral).
+
+`uv`'s sandbox cache (`UV_CACHE_DIR`) and the Hugging Face hub cache (`HF_HOME`) default to `$MARIMO_WORKSPACE/.cache/uv` and `$MARIMO_WORKSPACE/.cache/huggingface`, so downloaded notebook dependencies and models persist alongside the notebooks.
+Set `MARIMO_CACHE_DIR=/home/runpod/.cache` (or any other path) to force caches onto ephemeral container storage — useful if your volume is small or you want faster local reads.
+`UV_CACHE_DIR` and `HF_HOME` can be set individually to override either cache independently.
 
 Access to the marimo server is gated by Runpod's proxy; the image launches marimo with `--no-token` and does not expose marimo's built-in authentication.
 

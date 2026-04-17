@@ -49,6 +49,43 @@ if [[ -n "${PUBLIC_KEY:-}" ]]; then
     fi
 fi
 
+# ── Workspace and cache directories ──────────────────────────────────────────
+# marimo's file browser opens to WORKSPACE. Notebooks and the per-sandbox
+# uv caches and HF model downloads are rooted here so a Runpod network
+# volume attached at /workspace persists everything across pod stop/start.
+#
+# WORKSPACE selection:
+#   1. MARIMO_WORKSPACE if set (user override).
+#   2. /workspace unconditionally, matching Runpod's volume-mount convention.
+#      When no volume is attached /workspace is just a fresh container dir;
+#      install -d creates it on the spot. Ownership of the top-level mount
+#      point is set to the runpod user (non-recursive) so marimo — which
+#      runs unprivileged — can create new files; existing files on a
+#      populated volume keep their owner and mode.
+#
+# Cache root (UV_CACHE_DIR, HF_HOME):
+#   1. Individual UV_CACHE_DIR / HF_HOME if set (fine-grained user override).
+#   2. MARIMO_CACHE_DIR as a grouped override (e.g. set to /home/runpod/.cache
+#      to force ephemeral container-local caches even when /workspace is a
+#      persistent volume).
+#   3. <workspace>/.cache, so a user who attaches a volume automatically
+#      gets persistent uv sandbox builds and HF downloads in addition to
+#      their notebooks.
+#
+# This block runs before _forward_env below so the computed cache paths
+# flow into /etc/profile.d/zz-pod-env.sh for login shells.
+WORKSPACE="${MARIMO_WORKSPACE:-/workspace}"
+install -d -o runpod -g runpod "$WORKSPACE"
+
+if [[ -n "${MARIMO_CACHE_DIR:-}" ]]; then
+    CACHE_ROOT="$MARIMO_CACHE_DIR"
+else
+    CACHE_ROOT="${WORKSPACE}/.cache"
+fi
+export UV_CACHE_DIR="${UV_CACHE_DIR:-$CACHE_ROOT/uv}"
+export HF_HOME="${HF_HOME:-$CACHE_ROOT/huggingface}"
+install -d -o runpod -g runpod "$CACHE_ROOT" "$UV_CACHE_DIR" "$HF_HOME"
+
 # Forward container environment variables to the runpod user's login shell.
 # `su -l` (used below) starts a clean login shell that discards the parent
 # process's environment. Env vars set by users when configuring their Runpod
@@ -96,29 +133,6 @@ if [[ -f /post_start.sh ]]; then
     if ! bash /post_start.sh; then
         echo "Warning: /post_start.sh failed; continuing to start marimo." >&2
     fi
-fi
-
-# Workspace directory opened in the marimo file browser.
-#
-# Selection order:
-#   1. MARIMO_WORKSPACE if explicitly set (user override).
-#   2. /workspace if present — Runpod mounts network volumes there, so this
-#      is where notebooks need to live to survive pod stop/start. Only the
-#      top-level mount point is chown'd to the runpod user (non-recursive)
-#      because the volume may contain files from prior pods or other tools
-#      whose ownership we should leave alone; top-level write access is all
-#      marimo needs to create new notebooks.
-#   3. /home/runpod/workspace, the image-baked fallback for pods without a
-#      network volume attached (ephemeral).
-if [[ -n "${MARIMO_WORKSPACE:-}" ]]; then
-    WORKSPACE="$MARIMO_WORKSPACE"
-elif [[ -d /workspace ]]; then
-    WORKSPACE=/workspace
-    if [[ "$(stat -c %U /workspace)" != "runpod" ]]; then
-        chown runpod:runpod /workspace
-    fi
-else
-    WORKSPACE=/home/runpod/workspace
 fi
 
 # Launch marimo editor as the runpod user.
