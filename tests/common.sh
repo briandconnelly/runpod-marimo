@@ -94,7 +94,7 @@ shared_tests() {
             check "HF_HOME usable by runpod" "_probe_dir_as_runpod $(printf '%q' "$MARIMO_ENV_HF")"
         fi
         if [[ -z "${UV_CACHE_DIR:-}" && -z "${HF_HOME:-}" ]]; then
-            EXPECTED_CACHE_ROOT="${MARIMO_CACHE_DIR:-/home/runpod/.cache}"
+            EXPECTED_CACHE_ROOT="${MARIMO_CACHE_DIR:-$MARIMO_WS/.cache}"
             check "UV_CACHE_DIR defaults to <cache_root>/uv" \
                 "[[ '$MARIMO_ENV_UV' == '$EXPECTED_CACHE_ROOT/uv' ]]"
             check "HF_HOME defaults to <cache_root>/huggingface" \

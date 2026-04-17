@@ -20,24 +20,23 @@ Pre-installing packages would allow imports that work in the pod but have no rec
 | Variable | Description | Default |
 |---|---|---|
 | `MARIMO_WORKSPACE` | Path to open in marimo's file browser | `/workspace` |
-| `MARIMO_CACHE_DIR` | Parent directory for `uv` and Hugging Face caches | `/home/runpod/.cache` |
+| `MARIMO_CACHE_DIR` | Parent directory for uv and Hugging Face caches | `$MARIMO_WORKSPACE/.cache` |
 
 `/workspace` is where Runpod mounts network volumes, so notebooks created through the file browser automatically persist across pod stop/start when a volume is attached.
 Without a volume, `/workspace` is a regular container directory (ephemeral).
 
-### Persisting the caches
+`uv`'s sandbox cache (`UV_CACHE_DIR`) and the Hugging Face hub cache (`HF_HOME`) default to `$MARIMO_WORKSPACE/.cache/uv` and `$MARIMO_WORKSPACE/.cache/huggingface`, so downloaded notebook dependencies and models persist on the volume alongside the notebooks.
 
-By default `uv`'s notebook-sandbox cache (`UV_CACHE_DIR`) and the Hugging Face hub cache (`HF_HOME`) live under `/home/runpod/.cache`, which is ephemeral container storage — any downloaded notebook dependencies or model files are lost on pod rebuild.
-The image ships with `uvx marimo` pre-cached at this location, so first-boot launches remain instant.
+### Opting out of persistent caches
 
-To keep the caches on a network volume so model and dependency downloads survive pod restarts, set `MARIMO_CACHE_DIR` to a path on the volume before starting the pod:
+If you don't want the caches on the volume — e.g. the volume is small, you'd prefer faster local reads, or you're sharing a volume across pods and want each pod's caches isolated — point `MARIMO_CACHE_DIR` at an in-container path:
 
 ```
-MARIMO_CACHE_DIR=/workspace/.cache
+MARIMO_CACHE_DIR=/home/runpod/.cache
 ```
 
-`UV_CACHE_DIR` and `HF_HOME` derive from `MARIMO_CACHE_DIR` (`$MARIMO_CACHE_DIR/uv` and `$MARIMO_CACHE_DIR/huggingface`), or can be set individually to point each cache at a different location.
-The first notebook opened after enabling this pays a one-time download cost to repopulate the cache on the volume; subsequent boots reuse it.
+That restores ephemeral container-local caches. The image's prewarmed `uvx marimo` cache lives at `/home/runpod/.cache/uv`, so first-boot launches are a cache hit.
+`UV_CACHE_DIR` and `HF_HOME` can also be set individually to relocate either cache independently.
 
 Access to the marimo server is gated by Runpod's proxy; the image launches marimo with `--no-token` and does not expose marimo's built-in authentication.
 

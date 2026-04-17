@@ -65,21 +65,23 @@ fi
 #
 # Cache root (UV_CACHE_DIR, HF_HOME):
 #   1. Individual UV_CACHE_DIR / HF_HOME if set (fine-grained user override).
-#   2. MARIMO_CACHE_DIR as a grouped override — the documented knob for
-#      persisting caches on a network volume, e.g.
-#      MARIMO_CACHE_DIR=/workspace/.cache.
-#   3. /home/runpod/.cache, ephemeral container storage. This matches
-#      uv's built-in default and where the build-time uvx marimo cache
-#      is warmed, so first-boot uvx launches are a cache hit. Downloaded
-#      notebook deps and HF models are lost on pod rebuild; users who
-#      want persistence opt in via MARIMO_CACHE_DIR.
+#   2. MARIMO_CACHE_DIR as a grouped override (e.g. set to /home/runpod/.cache
+#      to force ephemeral container-local caches even when /workspace is a
+#      persistent volume).
+#   3. <workspace>/.cache, so a user who attaches a volume automatically
+#      gets persistent uv sandbox builds and HF downloads in addition to
+#      their notebooks.
 #
 # This block runs before _forward_env below so the computed cache paths
 # flow into /etc/profile.d/zz-pod-env.sh for login shells.
 WORKSPACE="${MARIMO_WORKSPACE:-/workspace}"
 install -d -o runpod -g runpod "$WORKSPACE"
 
-CACHE_ROOT="${MARIMO_CACHE_DIR:-/home/runpod/.cache}"
+if [[ -n "${MARIMO_CACHE_DIR:-}" ]]; then
+    CACHE_ROOT="$MARIMO_CACHE_DIR"
+else
+    CACHE_ROOT="${WORKSPACE}/.cache"
+fi
 export UV_CACHE_DIR="${UV_CACHE_DIR:-$CACHE_ROOT/uv}"
 export HF_HOME="${HF_HOME:-$CACHE_ROOT/huggingface}"
 install -d -o runpod -g runpod "$CACHE_ROOT" "$UV_CACHE_DIR" "$HF_HOME"
