@@ -83,6 +83,14 @@ shared_tests() {
     check "zz-pod-env.sh does not leak JUPYTER_PASSWORD"     "! grep -q '^export JUPYTER_PASSWORD' $ZZ_ENV"
     check "zz-pod-env.sh does not leak MARIMO_TOKEN_PASSWORD" "! grep -q '^export MARIMO_TOKEN_PASSWORD' $ZZ_ENV"
 
+    section "MOTD"
+    check "/etc/motd exists and non-empty"       "test -s /etc/motd"
+    check "/etc/motd has banner glyphs"          "grep -qF '_/_/' /etc/motd"
+    check "/etc/motd has separator line"         "grep -qFe '------' /etc/motd"
+    check "/etc/profile.d/motd.sh exists"        "test -r /etc/profile.d/motd.sh"
+    check "profile.d hook cats /etc/motd"        "grep -qF '/etc/motd' /etc/profile.d/motd.sh"
+    check "profile.d hook skips SSH sessions"    "grep -qF 'SSH_CONNECTION' /etc/profile.d/motd.sh"
+
     section "User and permissions"
     check "runpod user exists"            "id runpod"
     check "home owned by runpod"          "[[ \$(stat -c %U /home/runpod) == runpod ]]"
