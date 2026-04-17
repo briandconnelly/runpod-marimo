@@ -106,10 +106,12 @@ shared_tests() {
     fi
 
     section "Sandbox isolation"
-    # Only assert that container-level tools (huggingface_hub, ty — installed
-    # as uv tools in the container) stay out of the sandbox. Notebook-side
-    # packages (numpy, pandas, torch, etc.) legitimately appear once any
-    # notebook declares them, so checking for their absence is brittle.
+    # Verify the isolation property directly: the runpod user's uv tool envs
+    # (where huggingface_hub and ty live) must not appear on the sandbox's
+    # sys.path. Asserting absence of specific packages was brittle — any
+    # notebook can legitimately declare numpy/huggingface_hub/etc. in its
+    # PEP 723 header, at which point it ships into the sandbox venv's own
+    # site-packages by design.
     local SBX_VENV PY
     SBX_VENV=$(ls -dt /tmp/marimo-sandbox-*/venv 2>/dev/null | head -1 || true)
     if [[ -n "$SBX_VENV" ]]; then
@@ -117,8 +119,8 @@ shared_tests() {
         check "sandbox venv python exists"     "test -x $PY"
         check "sandbox sys.prefix is the venv" "[[ \$($PY -c 'import sys; print(sys.prefix)') == $SBX_VENV ]]"
         check "marimo importable in sandbox"   "$PY -c 'import marimo'"
-        check "huggingface_hub NOT in sandbox" "! $PY -c 'import huggingface_hub'"
-        check "ty NOT in sandbox"              "! $PY -c 'import ty'"
+        check "no uv tool env on sandbox sys.path" \
+            "$PY -c 'import sys; sys.exit(1 if any(\"/.local/share/uv/tools/\" in p for p in sys.path) else 0)'"
     else
         echo "  (skipped — no /tmp/marimo-sandbox-*/venv yet; open a notebook and rerun)"
     fi
