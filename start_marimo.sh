@@ -128,4 +128,9 @@ MARIMO_ARGS="edit --host 0.0.0.0 --port 2971 ${AUTH_FLAG} --sandbox ${WORKSPACE_
 # and pins the exact marimo release so the image is deterministic.
 # uvx creates a clean isolated environment on first launch and reuses the
 # cached environment on subsequent starts.
-exec su -l runpod -c "uvx 'marimo[mcp,lsp]==${MARIMO_VERSION}' $MARIMO_ARGS"
+# Pre-escape the full package spec: `printf %q` protects both the version
+# value and the `[mcp,lsp]` glob characters from re-expansion by the su -l
+# shell, avoiding command injection through MARIMO_VERSION and spurious
+# glob matches against the runpod user's cwd.
+MARIMO_SPEC_Q=$(printf '%q' "marimo[mcp,lsp]==${MARIMO_VERSION}")
+exec su -l runpod -c "uvx ${MARIMO_SPEC_Q} $MARIMO_ARGS"
