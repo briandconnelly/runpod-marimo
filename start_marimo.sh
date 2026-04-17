@@ -66,9 +66,10 @@ _forward_env() {
             HOME|USER|LOGNAME|SHELL|TERM|PATH|SHLVL|PWD|OLDPWD|_|HOSTNAME) continue ;;
             # Bash readonly variables that would error on re-export
             BASHOPTS|SHELLOPTS) continue ;;
-            # Consumed at boot by SSH setup / unused Jupyter hook; both are
-            # credentials or startup-only and have no use in the notebook env.
-            PUBLIC_KEY|JUPYTER_PASSWORD) continue ;;
+            # Consumed at boot by SSH setup / unused Jupyter hook / marimo
+            # token auth; all are credentials or startup-only and have no use
+            # in the notebook env.
+            PUBLIC_KEY|JUPYTER_PASSWORD|MARIMO_TOKEN_PASSWORD) continue ;;
         esac
         # Skip entries that aren't valid shell identifiers (e.g. BASH_FUNC_*%%)
         [[ "$key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || continue
@@ -99,13 +100,29 @@ fi
 WORKSPACE="${MARIMO_WORKSPACE:-/home/runpod/workspace}"
 
 # Launch marimo editor as the runpod user.
-# --host 0.0.0.0  : bind to all interfaces so Runpod's proxy can reach it
-# --port 2971     : marimo's default port (exposed in the Runpod template config)
-# --no-token      : disable marimo's built-in token auth; authentication is
-#                   handled by Runpod's proxy — do not expose port 2971 directly
-# --sandbox       : run each notebook in an isolated uv environment derived from
-#                   its PEP 723 inline script metadata, ensuring reproducibility
-MARIMO_ARGS="edit --host 0.0.0.0 --port 2971 --no-token --sandbox '${WORKSPACE}'"
+# --host 0.0.0.0       : bind to all interfaces so Runpod's proxy can reach it
+# --port 2971          : marimo's default port (exposed in the Runpod template config)
+# --no-token           : disable marimo's built-in token auth (default); authentication
+#                        is handled by Runpod's proxy — do not expose port 2971 directly
+# --token-password VAL : require a password prompt; opted into by setting
+#                        MARIMO_TOKEN_PASSWORD. Mutually exclusive with --no-token.
+# --sandbox            : run each notebook in an isolated uv environment derived from
+#                        its PEP 723 inline script metadata, ensuring reproducibility
+#
+# MARIMO_ARGS is interpolated into `su -l runpod -c "uvx ... $MARIMO_ARGS"` below,
+# so the string is re-parsed as a shell command by the su-invoked shell. Every
+# value substituted in from the environment (workspace path, token password) is
+# pre-escaped with `printf %q` so special characters survive that second parse
+# unchanged and cannot inject commands — this script runs as root, so unescaped
+# interpolation of user-controlled env vars would be a privilege-escalation hole.
+if [[ -n "${MARIMO_TOKEN_PASSWORD:-}" ]]; then
+    echo "Token authentication enabled."
+    AUTH_FLAG=$(printf -- '--token-password %q' "$MARIMO_TOKEN_PASSWORD")
+else
+    AUTH_FLAG="--no-token"
+fi
+WORKSPACE_Q=$(printf '%q' "$WORKSPACE")
+MARIMO_ARGS="edit --host 0.0.0.0 --port 2971 ${AUTH_FLAG} --sandbox ${WORKSPACE_Q}"
 
 # MARIMO_VERSION is set at build time (Dockerfile ARG → ENV → /etc/profile.d/)
 # and pins the exact marimo release so the image is deterministic.

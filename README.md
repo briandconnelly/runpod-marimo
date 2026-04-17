@@ -29,6 +29,11 @@ Pre-installing packages would allow imports that work in the pod but have no rec
 | Variable | Description | Default |
 |---|---|---|
 | `MARIMO_WORKSPACE` | Path to open in marimo's file browser | `/home/runpod/workspace` |
+| `MARIMO_TOKEN_PASSWORD` | If set, marimo prompts for this password before granting access. When unset, no prompt is shown and authentication is delegated to Runpod's proxy. | *(unset)* |
+
+When `MARIMO_TOKEN_PASSWORD` is set, the value is passed as a CLI argument to marimo and is visible on the process command line (`ps`, `/proc/<pid>/cmdline`) to anyone with shell access on the pod.
+On a single-user Runpod pod this is generally acceptable — the user already has root — but treat it as a second factor layered on top of the Runpod proxy, not a secret hardened against local inspection.
+The value is not written into `/etc/profile.d/` and does not appear in SSH sessions or notebook shells.
 
 ## What is included
 
