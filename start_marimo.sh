@@ -68,7 +68,10 @@ _forward_env() {
             BASHOPTS|SHELLOPTS) continue ;;
             # Consumed at boot by SSH setup / unused Jupyter hook; credentials
             # or startup-only and have no use in the notebook env.
-            PUBLIC_KEY|JUPYTER_PASSWORD) continue ;;
+            # MARIMO_TOKEN_PASSWORD is a legacy variable from 0.5.0-0.5.1
+            # that older pod templates may still set; keep it out of the
+            # login-shell environment even though the feature is gone.
+            PUBLIC_KEY|JUPYTER_PASSWORD|MARIMO_TOKEN_PASSWORD) continue ;;
         esac
         # Skip entries that aren't valid shell identifiers (e.g. BASH_FUNC_*%%)
         [[ "$key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || continue
