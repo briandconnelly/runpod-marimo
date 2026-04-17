@@ -86,6 +86,21 @@ export UV_CACHE_DIR="${UV_CACHE_DIR:-$CACHE_ROOT/uv}"
 export HF_HOME="${HF_HOME:-$CACHE_ROOT/huggingface}"
 install -d -o runpod -g runpod "$CACHE_ROOT" "$UV_CACHE_DIR" "$HF_HOME"
 
+# Probe that the workspace is actually usable by the runpod user before
+# launching marimo. install -d above should guarantee this, but a network
+# volume with restrictive ACLs, an immutable bit, or a read-only mount
+# can all silently leave us in a state where marimo launches fine but
+# fails to save the first notebook — which is exactly the failure mode
+# this image is meant to prevent. Directories need both the write bit
+# and the execute (search) bit for file creation, so check both.
+WORKSPACE_Q_PROBE=$(printf '%q' "$WORKSPACE")
+if ! su -l runpod -c "test -w $WORKSPACE_Q_PROBE && test -x $WORKSPACE_Q_PROBE"; then
+    echo "Error: workspace '$WORKSPACE' is not writable by the runpod user." >&2
+    echo "       Check mount permissions, ACLs, or set MARIMO_WORKSPACE to a usable path." >&2
+    exit 1
+fi
+unset WORKSPACE_Q_PROBE
+
 # Forward container environment variables to the runpod user's login shell.
 # `su -l` (used below) starts a clean login shell that discards the parent
 # process's environment. Env vars set by users when configuring their Runpod

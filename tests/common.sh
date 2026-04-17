@@ -19,6 +19,15 @@ check() {
 
 section() { printf '\n== %s ==\n' "$*"; }
 
+# Verify a directory is usable by the runpod user: both the write bit and
+# the execute (search) bit are required to create files inside it, so we
+# check both. Argument is a single printf-%q-quoted path so special
+# characters survive the `su -l -c` re-parse.
+_probe_dir_as_runpod() {
+    local path_q="$1"
+    su -l runpod -c "test -w $path_q && test -x $path_q"
+}
+
 shared_tests() {
     section "Environment"
     echo "MARIMO_VERSION: ${MARIMO_VERSION:-<unset>}"
@@ -53,10 +62,14 @@ shared_tests() {
         check "marimo --no-token"         "[[ '$MARIMO_CMD' == *--no-token* ]]"
 
         # The workspace path is the last positional argument to marimo
-        # edit. It determines where new notebooks are created; if it is
-        # not persisted, notebooks are lost on pod stop/start.
-        MARIMO_WS=$(echo "$MARIMO_CMD" | awk '{print $NF}')
-        check "marimo workspace writable by runpod" "su -l runpod -c 'test -w $MARIMO_WS'"
+        # edit. Read it from /proc/PID/cmdline (NUL-separated, verbatim)
+        # rather than `ps -o args`, which reconstructs the command line
+        # and can re-quote arguments containing spaces.
+        MARIMO_WS=$(tr '\0' '\n' < /proc/"$MARIMO_PID"/cmdline | tail -n 1)
+        # Directories need write + execute bits to create new files, so
+        # probe both. Quote via printf %q so paths with spaces or special
+        # characters survive the su -c re-parse.
+        check "marimo workspace usable by runpod" "_probe_dir_as_runpod $(printf '%q' "$MARIMO_WS")"
         if [[ -z "${MARIMO_WORKSPACE:-}" ]]; then
             check "marimo defaults workspace to /workspace" "[[ '$MARIMO_WS' == /workspace ]]"
         fi
@@ -75,10 +88,10 @@ shared_tests() {
         check "marimo has UV_CACHE_DIR set" "test -n '$MARIMO_ENV_UV'"
         check "marimo has HF_HOME set"      "test -n '$MARIMO_ENV_HF'"
         if [[ -n "$MARIMO_ENV_UV" ]]; then
-            check "UV_CACHE_DIR is writable by runpod" "su -l runpod -c 'test -w $MARIMO_ENV_UV'"
+            check "UV_CACHE_DIR usable by runpod" "_probe_dir_as_runpod $(printf '%q' "$MARIMO_ENV_UV")"
         fi
         if [[ -n "$MARIMO_ENV_HF" ]]; then
-            check "HF_HOME is writable by runpod" "su -l runpod -c 'test -w $MARIMO_ENV_HF'"
+            check "HF_HOME usable by runpod" "_probe_dir_as_runpod $(printf '%q' "$MARIMO_ENV_HF")"
         fi
         if [[ -z "${UV_CACHE_DIR:-}" && -z "${HF_HOME:-}" ]]; then
             EXPECTED_CACHE_ROOT="${MARIMO_CACHE_DIR:-$MARIMO_WS/.cache}"
