@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `tests/run-remote.sh <ssh-target> [cpu|gpu]` helper for running the smoke-test suite against a live pod. Works around Runpod's SSH proxy rejecting `scp` and inline command exec by shipping `tests/` as a base64 tarball through a PTY.
+
+### Changed
+
+- GPU variant now builds on `nvidia/cuda:12.5.1-runtime-ubuntu24.04` (down from `13.2.0`). Runpod's fleet driver distribution meant 0.5.0's CUDA 13.2 baseline was supported by essentially 0% of hosts; 12.5.1 covers ~82% of the fleet while keeping the Ubuntu 24.04 OS baseline (NVIDIA does not publish `12.4` runtime images on Ubuntu 24.04). Notebooks that need a newer CUDA runtime pull it in via their PEP 723 headers and are unaffected.
+- Renovate is pinned to the CUDA 12.x series (`allowedVersions: <13`) for `nvidia/cuda` updates, so future bumps to CUDA 13.x require an explicit fleet-coverage check before merging.
+- GPU variant now removes the orphaned `/cuda-keyring_1.1-1_all.deb` installer left behind by the upstream `nvidia/cuda` base image.
+- marimo's uvx tool environment is now pre-populated at build time, eliminating the ~1-2 minute first-boot wait while uvx downloaded and installed `marimo[mcp,lsp]`. The cache key is the exact spec string, so users who override `MARIMO_VERSION` at runtime still pay the install cost once for their version.
+- `HEALTHCHECK --start-period` raised from 60s to 120s for extra headroom on slow cold starts.
+
+### Fixed
+
+- GPU pods on hosts with CUDA driver < 13.2 failed to start with `nvidia-container-cli: requirement error: unsatisfied condition: cuda>=13.2`. The CUDA base downgrade above restores compatibility with the overwhelming majority of Runpod's fleet.
+
+### Removed
+
+- ASCII-art MOTD and its `/etc/profile.d/motd.sh` hook. The Runpod SSH proxy execs bash directly into the container without going through `sshd` / PAM and without a login shell, so neither `pam_motd` nor `/etc/profile.d/*.sh` ever ran — the banner was never actually shown on the primary login path.
+
 ## [0.5.0] - 2026-04-17
 
 ### Added

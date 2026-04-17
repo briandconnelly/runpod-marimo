@@ -83,14 +83,6 @@ shared_tests() {
     check "zz-pod-env.sh does not leak JUPYTER_PASSWORD"     "! grep -q '^export JUPYTER_PASSWORD' $ZZ_ENV"
     check "zz-pod-env.sh does not leak MARIMO_TOKEN_PASSWORD" "! grep -q '^export MARIMO_TOKEN_PASSWORD' $ZZ_ENV"
 
-    section "MOTD"
-    check "/etc/motd exists and non-empty"       "test -s /etc/motd"
-    check "/etc/motd has banner glyphs"          "grep -qF '_/_/' /etc/motd"
-    check "/etc/motd has separator line"         "grep -qFe '------' /etc/motd"
-    check "/etc/profile.d/motd.sh exists"        "test -r /etc/profile.d/motd.sh"
-    check "profile.d hook cats /etc/motd"        "grep -qF '/etc/motd' /etc/profile.d/motd.sh"
-    check "profile.d hook skips SSH sessions"    "grep -qF 'SSH_CONNECTION' /etc/profile.d/motd.sh"
-
     section "User and permissions"
     check "runpod user exists"            "id runpod"
     check "home owned by runpod"          "[[ \$(stat -c %U /home/runpod) == runpod ]]"
@@ -114,6 +106,10 @@ shared_tests() {
     fi
 
     section "Sandbox isolation"
+    # Only assert that container-level tools (huggingface_hub, ty — installed
+    # as uv tools in the container) stay out of the sandbox. Notebook-side
+    # packages (numpy, pandas, torch, etc.) legitimately appear once any
+    # notebook declares them, so checking for their absence is brittle.
     local SBX_VENV PY
     SBX_VENV=$(ls -dt /tmp/marimo-sandbox-*/venv 2>/dev/null | head -1 || true)
     if [[ -n "$SBX_VENV" ]]; then
@@ -123,9 +119,6 @@ shared_tests() {
         check "marimo importable in sandbox"   "$PY -c 'import marimo'"
         check "huggingface_hub NOT in sandbox" "! $PY -c 'import huggingface_hub'"
         check "ty NOT in sandbox"              "! $PY -c 'import ty'"
-        check "numpy NOT in sandbox"           "! $PY -c 'import numpy'"
-        check "torch NOT in sandbox"           "! $PY -c 'import torch'"
-        check "pandas NOT in sandbox"          "! $PY -c 'import pandas'"
     else
         echo "  (skipped — no /tmp/marimo-sandbox-*/venv yet; open a notebook and rerun)"
     fi

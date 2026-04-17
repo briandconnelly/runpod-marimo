@@ -26,6 +26,12 @@
       "matchDatasources": ["python-version"],
       "matchDepNames": ["python"],
       "allowedVersions": ">=3.13 <3.14"
+    },
+    {
+      "description": "Pin nvidia/cuda to the 12.x series. Moving to 13.x requires a fleet-coverage check — a meaningful share of Runpod hosts must have drivers new enough to run the target CUDA minor, otherwise nvidia-container-cli refuses to start the container on most hosts. Bump this constraint deliberately after verifying coverage.",
+      "matchDatasources": ["docker"],
+      "matchDepNames": ["nvidia/cuda"],
+      "allowedVersions": "<13"
     }
   ]
 }

@@ -5,6 +5,12 @@ Marimo is served on port **2971** and is accessible via Runpod's web proxy.
 
 A CPU variant of this image is also published for pods without a GPU — use a tag with the `-cpu` suffix (e.g., `0.5.0-cpu`).
 
+## Host requirements
+
+Requires an NVIDIA GPU host with a driver supporting CUDA 12.5 or newer (Linux driver ≥ 555.42.06).
+If the host driver is older, `nvidia-container-cli` will refuse to start the container with `unsatisfied condition: cuda>=12.5`.
+You can check a candidate host's driver with `nvidia-smi` before launching.
+
 ## Reproducible notebooks by design
 
 This image is designed so that every notebook is fully self-contained and reproducible anywhere.
