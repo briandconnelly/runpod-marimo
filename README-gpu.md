@@ -1,20 +1,9 @@
-# runpod-marimo
+# runpod-marimo (GPU)
 
-A Docker image that runs [marimo](https://marimo.io) as a notebook server on [Runpod](https://runpod.io) GPU and CPU pods.
+A Docker image that runs [marimo](https://marimo.io) as a notebook server on Runpod GPU pods.
 Marimo is served on port **2971** and is accessible via Runpod's web proxy.
 
-## Variants
-
-The image is published in two variants from a single Dockerfile:
-
-| Variant | Base image | Tag examples |
-|---|---|---|
-| GPU | `nvidia/cuda:*-runtime-ubuntu24.04` | `0.4.0`, `0.4`, `0.4.0-gpu`, `0.4-gpu` |
-| CPU | `ubuntu:24.04` | `0.4.0-cpu`, `0.4-cpu` |
-
-Bare version tags (without a `-gpu` or `-cpu` suffix) resolve to the GPU variant.
-
-The [GPU](README-gpu.md) and [CPU](README-cpu.md) variants each have a dedicated README tailored for Runpod's pod template page.
+A CPU variant of this image is also published for pods without a GPU — use a tag with the `-cpu` suffix (e.g., `0.4.0-cpu`).
 
 ## Reproducible notebooks by design
 
@@ -39,25 +28,12 @@ The value is not written into `/etc/profile.d/` and does not appear in SSH sessi
 
 ## What is included
 
+- **CUDA runtime** — built on `nvidia/cuda:*-runtime-ubuntu24.04`, so `nvidia-smi` and the CUDA runtime libraries are available out of the box
+- **nvtop** for live GPU monitoring from the terminal
 - **marimo** with `lsp` (in-editor autocomplete, linting, and type checking via **ty**) and `mcp` extras
 - **huggingface_hub** CLI for downloading models and datasets
 - **GitHub CLI** (`gh`) and **runpodctl** for interacting with Runpod and GitHub from the terminal
 - **DuckDB** CLI for querying files from the terminal
 - Standard utilities: `git`, `curl`, `wget`, `jq`, `tmux`
-- **nvtop** for GPU monitoring (GPU variant only)
 
-## Building
-
-Images are built and published to [GitHub Container Registry](https://ghcr.io) automatically when a version tag (`v*.*.*`) is pushed.
-
-To build locally:
-
-```bash
-# GPU (default)
-docker build -t runpod-marimo:gpu .
-
-# CPU
-docker build -t runpod-marimo:cpu \
-  --build-arg VARIANT=cpu \
-  --build-arg "IMAGE_DESCRIPTION=Marimo notebook server for Runpod CPU pods" .
-```
+GPU-aware Python packages (PyTorch, JAX, CuPy, etc.) are **not** pre-installed — install them from within a notebook so they are recorded in the notebook's PEP 723 header alongside the CUDA version they target.
