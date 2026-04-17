@@ -20,6 +20,12 @@
       "prBodyNotes": [
         "This package uses SHA256 checksum verification in the Dockerfile. Download the new binary and update the corresponding `_SHA256` ARG before merging."
       ]
+    },
+    {
+      "description": "Stay on the Python 3.13 series; do not propose 3.14+ upgrades",
+      "matchDatasources": ["python-version"],
+      "matchDepNames": ["python"],
+      "allowedVersions": ">=3.13 <3.14"
     }
   ]
 }
