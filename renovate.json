@@ -25,7 +25,7 @@
       "description": "Stay on the Python 3.13 series; do not propose 3.14+ upgrades",
       "matchDatasources": ["python-version"],
       "matchDepNames": ["python"],
-      "allowedVersions": "<3.14"
+      "allowedVersions": ">=3.13 <3.14"
     }
   ]
 }
