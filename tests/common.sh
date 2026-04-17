@@ -50,15 +50,7 @@ shared_tests() {
         check "marimo --sandbox"          "[[ '$MARIMO_CMD' == *--sandbox* ]]"
         check "marimo --host 0.0.0.0"     "[[ '$MARIMO_CMD' == *'--host 0.0.0.0'* ]]"
         check "marimo --port 2971"        "[[ '$MARIMO_CMD' == *'--port 2971'* ]]"
-        # Token auth: exactly one of --no-token or --token-password must be
-        # present, matching whether the pod was launched with
-        # MARIMO_TOKEN_PASSWORD set.
-        if [[ "$MARIMO_CMD" == *--token-password* ]]; then
-            check "marimo --token-password (auth enabled)"     "[[ '$MARIMO_CMD' == *--token-password* ]]"
-            check "marimo NOT --no-token (mutually exclusive)" "[[ '$MARIMO_CMD' != *--no-token* ]]"
-        else
-            check "marimo --no-token (auth disabled, default)" "[[ '$MARIMO_CMD' == *--no-token* ]]"
-        fi
+        check "marimo --no-token"         "[[ '$MARIMO_CMD' == *--no-token* ]]"
     fi
 
     section "HTTP endpoint"
@@ -79,8 +71,8 @@ shared_tests() {
     check "runpod-env.sh exports UV path"                "grep -qF 'export UV=/usr/local/bin/uv' $RE_ENV"
     check "runpod-env.sh exports MARIMO_VERSION"         "grep -q 'export MARIMO_VERSION=' $RE_ENV"
     check "zz-pod-env.sh exists"                             "test -r $ZZ_ENV"
-    check "zz-pod-env.sh does not leak PUBLIC_KEY"           "! grep -q '^export PUBLIC_KEY' $ZZ_ENV"
-    check "zz-pod-env.sh does not leak JUPYTER_PASSWORD"     "! grep -q '^export JUPYTER_PASSWORD' $ZZ_ENV"
+    check "zz-pod-env.sh does not leak PUBLIC_KEY"            "! grep -q '^export PUBLIC_KEY' $ZZ_ENV"
+    check "zz-pod-env.sh does not leak JUPYTER_PASSWORD"      "! grep -q '^export JUPYTER_PASSWORD' $ZZ_ENV"
     check "zz-pod-env.sh does not leak MARIMO_TOKEN_PASSWORD" "! grep -q '^export MARIMO_TOKEN_PASSWORD' $ZZ_ENV"
 
     section "User and permissions"
