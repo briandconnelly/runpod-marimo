@@ -31,14 +31,24 @@ Pre-installing packages would allow imports that work in the pod but have no rec
 | Variable | Description | Default |
 |---|---|---|
 | `MARIMO_WORKSPACE` | Path to open in marimo's file browser | `/workspace` |
-| `MARIMO_CACHE_DIR` | Parent directory for uv and Hugging Face caches | `$MARIMO_WORKSPACE/.cache` |
+| `MARIMO_CACHE_DIR` | Parent directory for `uv` and Hugging Face caches | `/home/runpod/.cache` |
 
 `/workspace` is where Runpod mounts network volumes, so notebooks created through the file browser automatically persist across pod stop/start when a volume is attached.
 Without a volume, `/workspace` is a regular container directory (ephemeral).
 
-`uv`'s sandbox cache (`UV_CACHE_DIR`) and the Hugging Face hub cache (`HF_HOME`) default to `$MARIMO_WORKSPACE/.cache/uv` and `$MARIMO_WORKSPACE/.cache/huggingface`, so downloaded notebook dependencies and models persist alongside the notebooks.
-Set `MARIMO_CACHE_DIR=/home/runpod/.cache` (or any other path) to force caches onto ephemeral container storage — useful if your volume is small or you want faster local reads.
-`UV_CACHE_DIR` and `HF_HOME` can be set individually to override either cache independently.
+### Persisting the caches
+
+By default `uv`'s notebook-sandbox cache (`UV_CACHE_DIR`) and the Hugging Face hub cache (`HF_HOME`) live under `/home/runpod/.cache`, which is ephemeral container storage — any downloaded notebook dependencies or model files are lost on pod rebuild.
+The image ships with `uvx marimo` pre-cached at this location, so first-boot launches remain instant.
+
+To keep the caches on a network volume so model and dependency downloads survive pod restarts, set `MARIMO_CACHE_DIR` to a path on the volume before starting the pod:
+
+```
+MARIMO_CACHE_DIR=/workspace/.cache
+```
+
+`UV_CACHE_DIR` and `HF_HOME` derive from `MARIMO_CACHE_DIR` (`$MARIMO_CACHE_DIR/uv` and `$MARIMO_CACHE_DIR/huggingface`), or can be set individually to point each cache at a different location.
+The first notebook opened after enabling this pays a one-time download cost to repopulate the cache on the volume; subsequent boots reuse it.
 
 Access to the marimo server is gated by Runpod's proxy; the image launches marimo with `--no-token` and does not expose marimo's built-in authentication.
 
