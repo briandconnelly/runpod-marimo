@@ -3,7 +3,7 @@
 # CPU variant: plain Ubuntu 24.04
 # VARIANT is passed at build time; the matching base stage is selected below.
 # renovate: datasource=docker depName=nvidia/cuda
-ARG CUDA_BASE_TAG=13.0.3-runtime-ubuntu24.04
+ARG CUDA_BASE_TAG=13.2.0-runtime-ubuntu24.04
 # renovate: datasource=docker depName=ubuntu
 ARG UBUNTU_BASE_TAG=24.04
 # renovate: datasource=docker depName=ghcr.io/astral-sh/uv
