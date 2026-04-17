@@ -23,3 +23,7 @@ __pycache__/
 
 # Claude Code local overrides
 .claude/settings.local.json
+
+# Marimo local artifacts
+__marimo__/
+demo.py

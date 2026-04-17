@@ -9,8 +9,8 @@ The image is published in two variants from a single Dockerfile:
 
 | Variant | Base image | Tag examples |
 |---|---|---|
-| GPU | `nvidia/cuda:*-runtime-ubuntu24.04` | `0.4.0`, `0.4`, `0.4.0-gpu`, `0.4-gpu` |
-| CPU | `ubuntu:24.04` | `0.4.0-cpu`, `0.4-cpu` |
+| GPU | `nvidia/cuda:*-runtime-ubuntu24.04` | `0.5.0`, `0.5`, `0.5.0-gpu`, `0.5-gpu` |
+| CPU | `ubuntu:24.04` | `0.5.0-cpu`, `0.5-cpu` |
 
 Bare version tags (without a `-gpu` or `-cpu` suffix) resolve to the GPU variant.
 

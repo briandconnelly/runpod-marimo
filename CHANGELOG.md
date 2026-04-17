@@ -7,11 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-04-17
+
 ### Added
 
 - `MARIMO_TOKEN_PASSWORD` environment variable to require a password prompt before accessing the marimo server.
   When set, the image launches marimo with `--token-password` instead of the default `--no-token`; the value is excluded from env forwarding so it does not appear in SSH or notebook shells.
 - ASCII-art MOTD shown on login, with grey separator lines and purple banner text (SSH via `pam_motd`; Runpod web terminal and other non-SSH login shells via `/etc/profile.d/motd.sh`).
+- Smoke test scripts (`tests/test-cpu.sh`, `tests/test-gpu.sh`, `tests/common.sh`) for validating a running pod end-to-end (marimo reachable, sandbox isolation, env forwarding, CUDA availability on GPU). Run manually against a live pod; not executed in CI.
+- Variant-specific pod-template READMEs (`README-gpu.md`, `README-cpu.md`) tailored for Runpod's pod template page.
+
+### Changed
+
+- GPU variant is now built on `nvidia/cuda:13.2.0-runtime-ubuntu24.04` (up from the `12.x` series). This advances the CUDA major version baked into the image; notebooks that pin a specific CUDA toolkit in their PEP 723 header are unaffected.
+- Renovate is pinned to the Python 3.13 series (`>=3.13 <3.14`) for `PYTHON_VERSION` updates, so the image stays on 3.13 until a deliberate major bump.
 
 ## [0.4.0] - 2026-04-16
 

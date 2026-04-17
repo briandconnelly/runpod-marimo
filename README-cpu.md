@@ -3,7 +3,7 @@
 A Docker image that runs [marimo](https://marimo.io) as a notebook server on Runpod CPU pods.
 Marimo is served on port **2971** and is accessible via Runpod's web proxy.
 
-A GPU variant of this image is also published for CUDA-enabled pods — use a tag without the `-cpu` suffix (e.g., `0.4.0`).
+A GPU variant of this image is also published for CUDA-enabled pods — use a tag without the `-cpu` suffix (e.g., `0.5.0`).
 
 ## Reproducible notebooks by design
 
