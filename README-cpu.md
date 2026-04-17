@@ -19,7 +19,26 @@ Pre-installing packages would allow imports that work in the pod but have no rec
 
 | Variable | Description | Default |
 |---|---|---|
-| `MARIMO_WORKSPACE` | Path to open in marimo's file browser | `/home/runpod/workspace` |
+| `MARIMO_WORKSPACE` | Path to open in marimo's file browser | `/workspace` |
+| `MARIMO_CACHE_DIR` | Parent directory for uv and Hugging Face caches | `$MARIMO_WORKSPACE/.cache` |
+
+`/workspace` is where Runpod mounts network volumes, so notebooks created through the file browser automatically persist across pod stop/start when a volume is attached.
+Without a volume, `/workspace` is a regular container directory (ephemeral).
+
+`uv`'s sandbox cache (`UV_CACHE_DIR`) and the Hugging Face hub cache (`HF_HOME`) default to `$MARIMO_WORKSPACE/.cache/uv` and `$MARIMO_WORKSPACE/.cache/huggingface`, so downloaded notebook dependencies and models persist on the volume alongside the notebooks.
+
+### Opting out of persistent caches
+
+If you don't want the caches on the volume — e.g. the volume is small, you'd prefer faster local reads, or you're sharing a volume across pods — point `MARIMO_CACHE_DIR` at an in-container path:
+
+```
+MARIMO_CACHE_DIR=/home/runpod/.cache
+```
+
+That restores ephemeral container-local caches. The image's prewarmed `uvx marimo` cache lives at `/home/runpod/.cache/uv`, so first-boot launches are a cache hit.
+`UV_CACHE_DIR` and `HF_HOME` can also be set individually to relocate either cache independently.
+
+> **Shared volumes:** `HF_HOME` stores the Hugging Face auth token (`~/.cache/huggingface/token`), so a volume shared between pods will also share whoever is currently logged in with `huggingface-cli login`. If that's not what you want, keep `HF_HOME` off the shared volume (`HF_HOME=/home/runpod/.cache/huggingface`) while leaving `UV_CACHE_DIR` wherever you want it.
 
 Access to the marimo server is gated by Runpod's proxy; the image launches marimo with `--no-token` and does not expose marimo's built-in authentication.
 

@@ -108,25 +108,34 @@ RUN useradd -m -s /bin/bash runpod && \
     echo "runpod ALL=(ALL) NOPASSWD: /usr/bin/apt-get, /usr/bin/apt" > /etc/sudoers.d/runpod && \
     chmod 0440 /etc/sudoers.d/runpod
 
-# Create the default marimo workspace and config dir; ensure the user owns their home dir
-RUN mkdir -p /home/runpod/workspace /home/runpod/.config/marimo && \
+# Create the marimo config dir; ensure the user owns their home dir. The
+# workspace directory is created at runtime by start_marimo.sh so it can
+# match the actual mount point (/workspace when a Runpod network volume
+# is attached, or wherever MARIMO_WORKSPACE points).
+RUN mkdir -p /home/runpod/.config/marimo && \
     chown -R runpod:runpod /home/runpod
 
 # ── Runtime environment overrides ────────────────────────────────────────────
 # UV: explicit path so marimo can find uv for in-notebook package installation.
 # UV_PYTHON_INSTALL_DIR: shared system location for uv-managed Python
 # interpreters so the same install is visible to root and the runpod user.
-# UV_CACHE_DIR / HF_HOME: user-owned locations that work regardless of
-# whether /workspace is mounted.
 #
-# NOTE: Docker ENV is not inherited by login shells (su -l). We write these
-# to /etc/profile.d/ so they are available to all login shells as well.
+# UV_CACHE_DIR and HF_HOME are intentionally NOT baked in here — they are
+# computed at runtime in start_marimo.sh (based on the workspace path and
+# MARIMO_CACHE_DIR) and forwarded into the login-shell env via
+# /etc/profile.d/zz-pod-env.sh. Baking a static value here would shadow
+# any user override because Docker ENV wins over `${VAR:-default}` checks.
+# At image build time, uv falls back to its own default (~/.cache/uv
+# resolving to /home/runpod/.cache/uv for the runpod user), which is
+# where the prewarmed uvx marimo cache below lands.
+#
+# NOTE: Docker ENV is not inherited by login shells (su -l). We write
+# UV and UV_PYTHON_INSTALL_DIR to /etc/profile.d/ so they are available
+# to all login shells as well.
 ENV UV=/usr/local/bin/uv \
     UV_PYTHON_INSTALL_DIR=/opt/uv-python \
-    UV_CACHE_DIR=/home/runpod/.cache/uv \
-    HF_HOME=/home/runpod/.cache/huggingface \
     MARIMO_VERSION=${MARIMO_VERSION}
-RUN printf 'export UV=/usr/local/bin/uv\nexport UV_PYTHON_INSTALL_DIR=/opt/uv-python\nexport UV_CACHE_DIR=/home/runpod/.cache/uv\nexport HF_HOME=/home/runpod/.cache/huggingface\nexport MARIMO_VERSION=%s\nexport PATH="/home/runpod/.local/bin:$PATH"\n' \
+RUN printf 'export UV=/usr/local/bin/uv\nexport UV_PYTHON_INSTALL_DIR=/opt/uv-python\nexport MARIMO_VERSION=%s\nexport PATH="/home/runpod/.local/bin:$PATH"\n' \
         "${MARIMO_VERSION}" > /etc/profile.d/runpod-env.sh
 
 # ── Python ───────────────────────────────────────────────────────────────────
@@ -134,11 +143,14 @@ RUN printf 'export UV=/usr/local/bin/uv\nexport UV_PYTHON_INSTALL_DIR=/opt/uv-py
 # pinned to a full patch release so successive builds of the same image tag
 # resolve to the same interpreter; bump it explicitly to take patch updates.
 #
-# The install runs as the runpod user so uv's cache (UV_CACHE_DIR under
-# /home/runpod) stays user-owned — running as root would make the cache
-# unwritable for the later `uv tool install` step. /opt/uv-python is
-# pre-created and handed to runpod for the duration of the install, then
-# made world-readable so root can still read the interpreter metadata.
+# The install runs as the runpod user so uv's cache (~/.cache/uv →
+# /home/runpod/.cache/uv) stays user-owned — running as root would make
+# the cache unwritable for the later `uv tool install` step. The same
+# location receives the prewarmed `uvx marimo` cache below, which lets
+# pods opting out of persistent caches (MARIMO_CACHE_DIR=/home/runpod/.cache)
+# launch marimo on the first boot without re-downloading. /opt/uv-python
+# is pre-created and handed to runpod for the duration of the install,
+# then made world-readable so root can still read the interpreter metadata.
 RUN install -d -o runpod -g runpod /opt/uv-python && \
     su -l runpod -c "uv python install ${PYTHON_VERSION}" && \
     chmod -R a+rX /opt/uv-python

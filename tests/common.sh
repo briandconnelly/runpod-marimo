@@ -19,6 +19,15 @@ check() {
 
 section() { printf '\n== %s ==\n' "$*"; }
 
+# Verify a directory is usable by the runpod user: both the write bit and
+# the execute (search) bit are required to create files inside it, so we
+# check both. Argument is a single printf-%q-quoted path so special
+# characters survive the `su -l -c` re-parse.
+_probe_dir_as_runpod() {
+    local path_q="$1"
+    su -l runpod -c "test -w $path_q && test -x $path_q"
+}
+
 shared_tests() {
     section "Environment"
     echo "MARIMO_VERSION: ${MARIMO_VERSION:-<unset>}"
@@ -40,7 +49,7 @@ shared_tests() {
     check "marimo NOT installed as tool"      "! su -l runpod -c 'uv tool list' 2>/dev/null | grep -qw marimo"
 
     section "Marimo process"
-    local MARIMO_PID MARIMO_USER MARIMO_CMD
+    local MARIMO_PID MARIMO_USER MARIMO_CMD MARIMO_WS
     MARIMO_PID=$(pgrep -f 'bin/marimo edit' | head -1 || true)
     check "marimo editor running" "test -n '$MARIMO_PID'"
     if [[ -n "$MARIMO_PID" ]]; then
@@ -51,6 +60,49 @@ shared_tests() {
         check "marimo --host 0.0.0.0"     "[[ '$MARIMO_CMD' == *'--host 0.0.0.0'* ]]"
         check "marimo --port 2971"        "[[ '$MARIMO_CMD' == *'--port 2971'* ]]"
         check "marimo --no-token"         "[[ '$MARIMO_CMD' == *--no-token* ]]"
+
+        # The workspace path is the last positional argument to marimo
+        # edit. Read it from /proc/PID/cmdline (NUL-separated, verbatim)
+        # rather than `ps -o args`, which reconstructs the command line
+        # and can re-quote arguments containing spaces.
+        MARIMO_WS=$(tr '\0' '\n' < /proc/"$MARIMO_PID"/cmdline | tail -n 1)
+        # Directories need write + execute bits to create new files, so
+        # probe both. `printf %q` produces a shell-re-parseable form of
+        # the path (e.g. `/a\ b` for `/a b`); we then wrap the whole
+        # substitution in double quotes so the eval inside `check` sees
+        # it as a single token and the backslash-escapes survive intact
+        # all the way into the `su -l -c` inner shell.
+        check "marimo workspace usable by runpod" "_probe_dir_as_runpod \"$(printf '%q' "$MARIMO_WS")\""
+        if [[ -z "${MARIMO_WORKSPACE:-}" ]]; then
+            check "marimo defaults workspace to /workspace" "[[ '$MARIMO_WS' == /workspace ]]"
+        fi
+    fi
+
+    section "Cache locations"
+    # Caches should live under the workspace by default so they persist
+    # on a Runpod network volume. MARIMO_CACHE_DIR overrides to a
+    # specific path (common escape hatch: /home/runpod/.cache for
+    # ephemeral container storage). Individual UV_CACHE_DIR / HF_HOME
+    # still win if set explicitly.
+    local MARIMO_ENV_UV MARIMO_ENV_HF EXPECTED_CACHE_ROOT
+    if [[ -n "$MARIMO_PID" ]]; then
+        MARIMO_ENV_UV=$(tr '\0' '\n' < /proc/"$MARIMO_PID"/environ | sed -n 's/^UV_CACHE_DIR=//p')
+        MARIMO_ENV_HF=$(tr '\0' '\n' < /proc/"$MARIMO_PID"/environ | sed -n 's/^HF_HOME=//p')
+        check "marimo has UV_CACHE_DIR set" "test -n '$MARIMO_ENV_UV'"
+        check "marimo has HF_HOME set"      "test -n '$MARIMO_ENV_HF'"
+        if [[ -n "$MARIMO_ENV_UV" ]]; then
+            check "UV_CACHE_DIR usable by runpod" "_probe_dir_as_runpod \"$(printf '%q' "$MARIMO_ENV_UV")\""
+        fi
+        if [[ -n "$MARIMO_ENV_HF" ]]; then
+            check "HF_HOME usable by runpod" "_probe_dir_as_runpod \"$(printf '%q' "$MARIMO_ENV_HF")\""
+        fi
+        if [[ -z "${UV_CACHE_DIR:-}" && -z "${HF_HOME:-}" ]]; then
+            EXPECTED_CACHE_ROOT="${MARIMO_CACHE_DIR:-$MARIMO_WS/.cache}"
+            check "UV_CACHE_DIR defaults to <cache_root>/uv" \
+                "[[ '$MARIMO_ENV_UV' == '$EXPECTED_CACHE_ROOT/uv' ]]"
+            check "HF_HOME defaults to <cache_root>/huggingface" \
+                "[[ '$MARIMO_ENV_HF' == '$EXPECTED_CACHE_ROOT/huggingface' ]]"
+        fi
     fi
 
     section "HTTP endpoint"
@@ -78,7 +130,6 @@ shared_tests() {
     section "User and permissions"
     check "runpod user exists"            "id runpod"
     check "home owned by runpod"          "[[ \$(stat -c %U /home/runpod) == runpod ]]"
-    check "workspace exists"              "test -d /home/runpod/workspace"
     check "sudoers drop-in scoped to apt" "grep -qF 'NOPASSWD: /usr/bin/apt-get, /usr/bin/apt' /etc/sudoers.d/runpod"
     check "sudoers drop-in mode 0440"     "[[ \$(stat -c %a /etc/sudoers.d/runpod) == 440 ]]"
 

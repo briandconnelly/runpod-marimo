@@ -49,6 +49,126 @@ if [[ -n "${PUBLIC_KEY:-}" ]]; then
     fi
 fi
 
+# ── Workspace and cache directories ──────────────────────────────────────────
+# marimo's file browser opens to WORKSPACE. Notebooks and the per-sandbox
+# uv caches and HF model downloads are rooted here so a Runpod network
+# volume attached at /workspace persists everything across pod stop/start.
+#
+# WORKSPACE selection:
+#   1. MARIMO_WORKSPACE if set (user override).
+#   2. /workspace unconditionally, matching Runpod's volume-mount convention.
+#      When no volume is attached /workspace is just a fresh container dir;
+#      we create it on the spot.
+#
+# Cache root (UV_CACHE_DIR, HF_HOME):
+#   1. Individual UV_CACHE_DIR / HF_HOME if set (fine-grained user override).
+#   2. MARIMO_CACHE_DIR as a grouped override (e.g. set to /home/runpod/.cache
+#      to force ephemeral container-local caches even when /workspace is a
+#      persistent volume).
+#   3. <workspace>/.cache, so a user who attaches a volume automatically
+#      gets persistent uv sandbox builds and HF downloads in addition to
+#      their notebooks.
+
+# Validate the user-supplied path knobs. A misconfigured env var ("/",
+# " ", a relative path, or one with traversal like `/tmp/../../etc/...`)
+# could otherwise chown a system path we take ownership of below, or
+# land notebooks somewhere the user can't find them. We canonicalize
+# with `readlink -m` first (which resolves `..` / symlinks without
+# requiring the path to exist) so denylist checks can't be bypassed by
+# traversal. The canonicalized value is written back to the original
+# env var so downstream code uses the resolved path.
+_validate_path_var() {
+    local name="$1" value="$2" canonical
+    if [[ -z "$value" || "$value" != /* ]]; then
+        echo "Error: $name must be a non-empty absolute path; got '$value'." >&2
+        exit 1
+    fi
+    if ! canonical=$(readlink -m -- "$value"); then
+        echo "Error: failed to canonicalize $name path '$value'." >&2
+        exit 1
+    fi
+    case "$canonical" in
+        /|/bin|/boot|/dev|/etc|/lib|/lib32|/lib64|/proc|/root|/run|/sbin|/sys|/usr|/var)
+            echo "Error: $name refuses to take ownership of system path '$canonical' (resolved from '$value')." >&2
+            exit 1
+            ;;
+        /bin/*|/boot/*|/dev/*|/etc/*|/lib/*|/lib32/*|/lib64/*|/proc/*|/root/*|/run/*|/sbin/*|/sys/*|/usr/*|/var/*)
+            echo "Error: $name refuses to take ownership of a path under a system directory: '$canonical' (resolved from '$value')." >&2
+            exit 1
+            ;;
+    esac
+    printf -v "$name" '%s' "$canonical"
+    export "$name"
+}
+[[ -n "${MARIMO_WORKSPACE:-}" ]] && _validate_path_var MARIMO_WORKSPACE "$MARIMO_WORKSPACE"
+[[ -n "${MARIMO_CACHE_DIR:-}" ]] && _validate_path_var MARIMO_CACHE_DIR "$MARIMO_CACHE_DIR"
+
+# Ensure a directory exists and is owned by the runpod user. Only chowns
+# directories we created on this boot, to avoid changing ownership of
+# a pre-existing user-supplied path (e.g. a populated volume subdir).
+# Special case: /workspace itself is always chown'd because Runpod mounts
+# network volumes there root-owned, and marimo (unprivileged) must be
+# able to write at the top level.
+_ensure_runpod_dir() {
+    local dir="$1"
+    if [[ -d "$dir" ]]; then
+        if [[ "$dir" == "/workspace" ]]; then
+            chown runpod:runpod "$dir" || {
+                echo "Warning: could not chown '$dir' to runpod; marimo may fail to write notebooks." >&2
+            }
+        fi
+    else
+        mkdir -p "$dir" || {
+            echo "Error: failed to create '$dir'." >&2
+            exit 1
+        }
+        chown runpod:runpod "$dir" || {
+            echo "Error: failed to chown '$dir' to runpod." >&2
+            exit 1
+        }
+    fi
+}
+
+WORKSPACE="${MARIMO_WORKSPACE:-/workspace}"
+_ensure_runpod_dir "$WORKSPACE"
+
+CACHE_ROOT="${MARIMO_CACHE_DIR:-${WORKSPACE}/.cache}"
+# These exports are load-bearing — they flow into the parent process's
+# env, get captured by _forward_env below, and from there land in
+# /etc/profile.d/zz-pod-env.sh so marimo's `su -l runpod` login shell
+# (which would otherwise wipe them) picks them up. Do not move this
+# block after _forward_env without re-wiring the propagation.
+export UV_CACHE_DIR="${UV_CACHE_DIR:-$CACHE_ROOT/uv}"
+export HF_HOME="${HF_HOME:-$CACHE_ROOT/huggingface}"
+_ensure_runpod_dir "$CACHE_ROOT"
+_ensure_runpod_dir "$UV_CACHE_DIR"
+_ensure_runpod_dir "$HF_HOME"
+
+# Probe that the workspace and cache directories are actually usable
+# by the runpod user before launching marimo. The dir-setup above
+# should guarantee this for paths we created, but _ensure_runpod_dir
+# intentionally leaves ownership alone on pre-existing user-supplied
+# paths — so a user-provided MARIMO_CACHE_DIR / UV_CACHE_DIR / HF_HOME
+# pointing at a root-owned or ACL-restricted dir would slip through
+# silently and fail later when marimo/uv tries to write. Same goes for
+# a network volume with restrictive ACLs or a read-only mount. Each
+# failure mode produces a specific error here instead of a cryptic
+# cache/notebook-save failure after marimo is already running.
+# Directories need both the write bit and the execute (search) bit
+# for file creation, so check both.
+_probe_runpod_writable() {
+    local label="$1" path="$2" path_q
+    path_q=$(printf '%q' "$path")
+    if ! su -l runpod -c "test -w $path_q && test -x $path_q"; then
+        echo "Error: $label '$path' is not writable by the runpod user." >&2
+        echo "       Check mount permissions and ACLs, or set MARIMO_WORKSPACE / MARIMO_CACHE_DIR to a usable path." >&2
+        exit 1
+    fi
+}
+_probe_runpod_writable "workspace" "$WORKSPACE"
+_probe_runpod_writable "UV_CACHE_DIR" "$UV_CACHE_DIR"
+_probe_runpod_writable "HF_HOME" "$HF_HOME"
+
 # Forward container environment variables to the runpod user's login shell.
 # `su -l` (used below) starts a clean login shell that discards the parent
 # process's environment. Env vars set by users when configuring their Runpod
@@ -97,9 +217,6 @@ if [[ -f /post_start.sh ]]; then
         echo "Warning: /post_start.sh failed; continuing to start marimo." >&2
     fi
 fi
-
-# Workspace directory opened in the marimo file browser.
-WORKSPACE="${MARIMO_WORKSPACE:-/home/runpod/workspace}"
 
 # Launch marimo editor as the runpod user.
 # --host 0.0.0.0 : bind to all interfaces so Runpod's proxy can reach it
