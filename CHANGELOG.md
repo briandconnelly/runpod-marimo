@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `MARIMO_TOKEN_PASSWORD` environment variable to require a password prompt before accessing the marimo server.
+  When set, the image launches marimo with `--token-password` instead of the default `--no-token`; the value is excluded from env forwarding so it does not appear in SSH or notebook shells.
+
 ## [0.4.0] - 2026-04-16
 
 ### Added
