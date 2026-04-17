@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-04-17
+
 ### Added
 
 - `tests/run-remote.sh <ssh-target> [cpu|gpu]` helper for running the smoke-test suite against a live pod. Works around Runpod's SSH proxy rejecting `scp` and inline command exec by shipping `tests/` as a base64 tarball through a PTY.
