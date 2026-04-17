@@ -67,9 +67,12 @@ shared_tests() {
         # and can re-quote arguments containing spaces.
         MARIMO_WS=$(tr '\0' '\n' < /proc/"$MARIMO_PID"/cmdline | tail -n 1)
         # Directories need write + execute bits to create new files, so
-        # probe both. Quote via printf %q so paths with spaces or special
-        # characters survive the su -c re-parse.
-        check "marimo workspace usable by runpod" "_probe_dir_as_runpod $(printf '%q' "$MARIMO_WS")"
+        # probe both. `printf %q` produces a shell-re-parseable form of
+        # the path (e.g. `/a\ b` for `/a b`); we then wrap the whole
+        # substitution in double quotes so the eval inside `check` sees
+        # it as a single token and the backslash-escapes survive intact
+        # all the way into the `su -l -c` inner shell.
+        check "marimo workspace usable by runpod" "_probe_dir_as_runpod \"$(printf '%q' "$MARIMO_WS")\""
         if [[ -z "${MARIMO_WORKSPACE:-}" ]]; then
             check "marimo defaults workspace to /workspace" "[[ '$MARIMO_WS' == /workspace ]]"
         fi
@@ -88,10 +91,10 @@ shared_tests() {
         check "marimo has UV_CACHE_DIR set" "test -n '$MARIMO_ENV_UV'"
         check "marimo has HF_HOME set"      "test -n '$MARIMO_ENV_HF'"
         if [[ -n "$MARIMO_ENV_UV" ]]; then
-            check "UV_CACHE_DIR usable by runpod" "_probe_dir_as_runpod $(printf '%q' "$MARIMO_ENV_UV")"
+            check "UV_CACHE_DIR usable by runpod" "_probe_dir_as_runpod \"$(printf '%q' "$MARIMO_ENV_UV")\""
         fi
         if [[ -n "$MARIMO_ENV_HF" ]]; then
-            check "HF_HOME usable by runpod" "_probe_dir_as_runpod $(printf '%q' "$MARIMO_ENV_HF")"
+            check "HF_HOME usable by runpod" "_probe_dir_as_runpod \"$(printf '%q' "$MARIMO_ENV_HF")\""
         fi
         if [[ -z "${UV_CACHE_DIR:-}" && -z "${HF_HOME:-}" ]]; then
             EXPECTED_CACHE_ROOT="${MARIMO_CACHE_DIR:-$MARIMO_WS/.cache}"

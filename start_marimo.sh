@@ -70,25 +70,35 @@ fi
 #      their notebooks.
 
 # Validate the user-supplied path knobs. A misconfigured env var ("/",
-# " ", a relative path, etc.) could otherwise either chown a system
-# path we take ownership of below, or land notebooks somewhere the
-# user can't find them. Requiring absolute paths is a cheap guard.
+# " ", a relative path, or one with traversal like `/tmp/../../etc/...`)
+# could otherwise chown a system path we take ownership of below, or
+# land notebooks somewhere the user can't find them. We canonicalize
+# with `readlink -m` first (which resolves `..` / symlinks without
+# requiring the path to exist) so denylist checks can't be bypassed by
+# traversal. The canonicalized value is written back to the original
+# env var so downstream code uses the resolved path.
 _validate_path_var() {
-    local name="$1" value="$2"
+    local name="$1" value="$2" canonical
     if [[ -z "$value" || "$value" != /* ]]; then
         echo "Error: $name must be a non-empty absolute path; got '$value'." >&2
         exit 1
     fi
-    case "$value" in
+    if ! canonical=$(readlink -m -- "$value"); then
+        echo "Error: failed to canonicalize $name path '$value'." >&2
+        exit 1
+    fi
+    case "$canonical" in
         /|/bin|/boot|/dev|/etc|/lib|/lib32|/lib64|/proc|/root|/run|/sbin|/sys|/usr|/var)
-            echo "Error: $name refuses to take ownership of system path '$value'." >&2
+            echo "Error: $name refuses to take ownership of system path '$canonical' (resolved from '$value')." >&2
             exit 1
             ;;
         /bin/*|/boot/*|/dev/*|/etc/*|/lib/*|/lib32/*|/lib64/*|/proc/*|/root/*|/run/*|/sbin/*|/sys/*|/usr/*|/var/*)
-            echo "Error: $name refuses to take ownership of a path under a system directory: '$value'." >&2
+            echo "Error: $name refuses to take ownership of a path under a system directory: '$canonical' (resolved from '$value')." >&2
             exit 1
             ;;
     esac
+    printf -v "$name" '%s' "$canonical"
+    export "$name"
 }
 [[ -n "${MARIMO_WORKSPACE:-}" ]] && _validate_path_var MARIMO_WORKSPACE "$MARIMO_WORKSPACE"
 [[ -n "${MARIMO_CACHE_DIR:-}" ]] && _validate_path_var MARIMO_CACHE_DIR "$MARIMO_CACHE_DIR"
@@ -134,20 +144,30 @@ _ensure_runpod_dir "$CACHE_ROOT"
 _ensure_runpod_dir "$UV_CACHE_DIR"
 _ensure_runpod_dir "$HF_HOME"
 
-# Probe that the workspace is actually usable by the runpod user before
-# launching marimo. The dir-setup above should guarantee this, but a
-# network volume with restrictive ACLs, an immutable bit, or a
-# read-only mount can all leave us in a state where marimo launches
-# fine but fails to save the first notebook — the exact failure mode
-# this image is meant to prevent. Directories need both the write bit
-# and the execute (search) bit for file creation, so check both.
-WORKSPACE_Q_PROBE=$(printf '%q' "$WORKSPACE")
-if ! su -l runpod -c "test -w $WORKSPACE_Q_PROBE && test -x $WORKSPACE_Q_PROBE"; then
-    echo "Error: workspace '$WORKSPACE' is not writable by the runpod user." >&2
-    echo "       Check mount permissions, ACLs, or set MARIMO_WORKSPACE to a usable path." >&2
-    exit 1
-fi
-unset WORKSPACE_Q_PROBE
+# Probe that the workspace and cache directories are actually usable
+# by the runpod user before launching marimo. The dir-setup above
+# should guarantee this for paths we created, but _ensure_runpod_dir
+# intentionally leaves ownership alone on pre-existing user-supplied
+# paths — so a user-provided MARIMO_CACHE_DIR / UV_CACHE_DIR / HF_HOME
+# pointing at a root-owned or ACL-restricted dir would slip through
+# silently and fail later when marimo/uv tries to write. Same goes for
+# a network volume with restrictive ACLs or a read-only mount. Each
+# failure mode produces a specific error here instead of a cryptic
+# cache/notebook-save failure after marimo is already running.
+# Directories need both the write bit and the execute (search) bit
+# for file creation, so check both.
+_probe_runpod_writable() {
+    local label="$1" path="$2" path_q
+    path_q=$(printf '%q' "$path")
+    if ! su -l runpod -c "test -w $path_q && test -x $path_q"; then
+        echo "Error: $label '$path' is not writable by the runpod user." >&2
+        echo "       Check mount permissions and ACLs, or set MARIMO_WORKSPACE / MARIMO_CACHE_DIR to a usable path." >&2
+        exit 1
+    fi
+}
+_probe_runpod_writable "workspace" "$WORKSPACE"
+_probe_runpod_writable "UV_CACHE_DIR" "$UV_CACHE_DIR"
+_probe_runpod_writable "HF_HOME" "$HF_HOME"
 
 # Forward container environment variables to the runpod user's login shell.
 # `su -l` (used below) starts a clean login shell that discards the parent
