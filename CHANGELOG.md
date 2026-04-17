@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `MARIMO_TOKEN_PASSWORD` environment variable to require a password prompt before accessing the marimo server.
   When set, the image launches marimo with `--token-password` instead of the default `--no-token`; the value is excluded from env forwarding so it does not appear in SSH or notebook shells.
+- ASCII-art MOTD shown on login, with grey separator lines and purple banner text (SSH via `pam_motd`; Runpod web terminal and other non-SSH login shells via `/etc/profile.d/motd.sh`).
 
 ## [0.4.0] - 2026-04-16
 
