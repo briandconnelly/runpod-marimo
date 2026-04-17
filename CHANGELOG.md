@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- New notebooks now default to `/workspace` when a Runpod network volume is mounted there, so they survive pod stop/start. Previously the workspace was hardcoded to `/home/runpod/workspace` (ephemeral container state), silently dropping notebooks whenever the pod was rebuilt. `MARIMO_WORKSPACE` still overrides, and pods without a volume fall back to `/home/runpod/workspace`. Ownership of the `/workspace` mount point is set to the `runpod` user at startup (non-recursive, so preexisting files on the volume are untouched) since marimo runs unprivileged.
+
 ## [0.5.2] - 2026-04-17
 
 ### Removed

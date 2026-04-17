@@ -40,7 +40,7 @@ shared_tests() {
     check "marimo NOT installed as tool"      "! su -l runpod -c 'uv tool list' 2>/dev/null | grep -qw marimo"
 
     section "Marimo process"
-    local MARIMO_PID MARIMO_USER MARIMO_CMD
+    local MARIMO_PID MARIMO_USER MARIMO_CMD MARIMO_WS
     MARIMO_PID=$(pgrep -f 'bin/marimo edit' | head -1 || true)
     check "marimo editor running" "test -n '$MARIMO_PID'"
     if [[ -n "$MARIMO_PID" ]]; then
@@ -51,6 +51,16 @@ shared_tests() {
         check "marimo --host 0.0.0.0"     "[[ '$MARIMO_CMD' == *'--host 0.0.0.0'* ]]"
         check "marimo --port 2971"        "[[ '$MARIMO_CMD' == *'--port 2971'* ]]"
         check "marimo --no-token"         "[[ '$MARIMO_CMD' == *--no-token* ]]"
+
+        # The workspace path is the last positional argument to marimo edit.
+        # It determines where new notebooks are created; if it's on a
+        # non-persistent path while a network volume is mounted, users lose
+        # work across pod restarts.
+        MARIMO_WS=$(echo "$MARIMO_CMD" | awk '{print $NF}')
+        check "marimo workspace writable by runpod" "su -l runpod -c 'test -w $MARIMO_WS'"
+        if [[ -z "${MARIMO_WORKSPACE:-}" && -d /workspace ]]; then
+            check "marimo uses /workspace when mounted" "[[ '$MARIMO_WS' == /workspace ]]"
+        fi
     fi
 
     section "HTTP endpoint"

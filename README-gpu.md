@@ -25,7 +25,10 @@ Pre-installing packages would allow imports that work in the pod but have no rec
 
 | Variable | Description | Default |
 |---|---|---|
-| `MARIMO_WORKSPACE` | Path to open in marimo's file browser | `/home/runpod/workspace` |
+| `MARIMO_WORKSPACE` | Path to open in marimo's file browser | `/workspace` if present (Runpod mounts network volumes there), else `/home/runpod/workspace` |
+
+When a network volume is attached to the pod, notebooks are created under `/workspace` by default so they survive pod stop/start.
+Pods without a network volume fall back to the in-container `/home/runpod/workspace`, which is ephemeral.
 
 Access to the marimo server is gated by Runpod's proxy; the image launches marimo with `--no-token` and does not expose marimo's built-in authentication.
 

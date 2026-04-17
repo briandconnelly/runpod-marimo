@@ -99,7 +99,27 @@ if [[ -f /post_start.sh ]]; then
 fi
 
 # Workspace directory opened in the marimo file browser.
-WORKSPACE="${MARIMO_WORKSPACE:-/home/runpod/workspace}"
+#
+# Selection order:
+#   1. MARIMO_WORKSPACE if explicitly set (user override).
+#   2. /workspace if present — Runpod mounts network volumes there, so this
+#      is where notebooks need to live to survive pod stop/start. Only the
+#      top-level mount point is chown'd to the runpod user (non-recursive)
+#      because the volume may contain files from prior pods or other tools
+#      whose ownership we should leave alone; top-level write access is all
+#      marimo needs to create new notebooks.
+#   3. /home/runpod/workspace, the image-baked fallback for pods without a
+#      network volume attached (ephemeral).
+if [[ -n "${MARIMO_WORKSPACE:-}" ]]; then
+    WORKSPACE="$MARIMO_WORKSPACE"
+elif [[ -d /workspace ]]; then
+    WORKSPACE=/workspace
+    if [[ "$(stat -c %U /workspace)" != "runpod" ]]; then
+        chown runpod:runpod /workspace
+    fi
+else
+    WORKSPACE=/home/runpod/workspace
+fi
 
 # Launch marimo editor as the runpod user.
 # --host 0.0.0.0 : bind to all interfaces so Runpod's proxy can reach it
