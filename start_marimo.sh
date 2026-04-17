@@ -37,6 +37,12 @@ if [[ -n "${PUBLIC_KEY:-}" ]]; then
         fi
     done
 
+    # On Ubuntu 24.04 openssh-server relies on systemd to create /run/sshd
+    # via a RuntimeDirectory= unit directive. In a non-systemd container,
+    # that directory is never created and sshd fails with "Missing privilege
+    # separation directory". Create it explicitly before starting the service.
+    mkdir -p /run/sshd
+
     if ! service ssh start; then
         echo "Error: failed to start sshd after PUBLIC_KEY was provided" >&2
         exit 1

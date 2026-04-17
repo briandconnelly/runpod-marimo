@@ -18,10 +18,8 @@ jobs:
       matrix:
         include:
           - variant: gpu
-            base_image: "runpod/base:1.0.3-cuda1300-ubuntu2404"
             description: "Marimo notebook server for Runpod GPU pods"
           - variant: cpu
-            base_image: "runpod/base:1.0.3-ubuntu2404"
             description: "Marimo notebook server for Runpod CPU pods"
 
     steps:
@@ -38,7 +36,6 @@ jobs:
           push: false
           platforms: linux/amd64
           build-args: |
-            BASE_IMAGE=${{ matrix.base_image }}
             VARIANT=${{ matrix.variant }}
             IMAGE_DESCRIPTION=${{ matrix.description }}
           cache-from: type=gha,scope=${{ matrix.variant }}

@@ -7,8 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-04-16
+
+### Added
+
+- `PYTHON_VERSION` build arg selects the CPython version that `uv` installs into the image (Renovate-tracked).
+- `UV_VERSION` build arg pins the `uv` binary copied from `ghcr.io/astral-sh/uv` (Renovate-tracked).
+
 ### Changed
 
+- GPU variant now builds on `nvidia/cuda:*-runtime-ubuntu24.04` instead of `runpod/base`, dropping roughly 4 GB from the image.
+- CPU variant now builds on `ubuntu:24.04` instead of `runpod/base`, dropping roughly 670 MB from the image.
+- Python is now installed and managed by `uv` rather than inherited from the base image; no system `python3` is present.
+- `uv` is now copied from the official `ghcr.io/astral-sh/uv` image at a pinned version rather than inherited from `runpod/base`.
 - Pod startup no longer delegates to the base image's `/start.sh`.
   SSH setup (via `PUBLIC_KEY`) and the `/pre_start.sh` / `/post_start.sh` user hooks are now handled directly in `start_marimo.sh`.
 

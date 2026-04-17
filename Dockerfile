@@ -1,9 +1,32 @@
-ARG BASE_IMAGE=runpod/base:1.0.3-cuda1300-ubuntu2404
-FROM ${BASE_IMAGE}
-
-ARG IMAGE_VERSION=dev
+# ── Base image selection ─────────────────────────────────────────────────────
+# GPU variant: upstream NVIDIA CUDA runtime on Ubuntu 24.04
+# CPU variant: plain Ubuntu 24.04
+# VARIANT is passed at build time; the matching base stage is selected below.
+# renovate: datasource=docker depName=nvidia/cuda
+ARG CUDA_BASE_TAG=13.0.3-runtime-ubuntu24.04
+# renovate: datasource=docker depName=ubuntu
+ARG UBUNTU_BASE_TAG=24.04
+# renovate: datasource=docker depName=ghcr.io/astral-sh/uv
+ARG UV_VERSION=0.11.7
 ARG VARIANT=gpu
+
+# Named stage for the uv binary distribution. A named stage is used rather
+# than `COPY --from=ghcr.io/astral-sh/uv:${UV_VERSION}` because BuildKit does
+# not reliably expand ARGs in the image reference of a COPY --from.
+FROM ghcr.io/astral-sh/uv:${UV_VERSION} AS uv-dist
+
+FROM nvidia/cuda:${CUDA_BASE_TAG} AS base-gpu
+FROM ubuntu:${UBUNTU_BASE_TAG} AS base-cpu
+FROM base-${VARIANT}
+
+# Re-declare ARGs that need to be visible after the final FROM.
+# IMAGE_VERSION is intentionally declared and consumed at the bottom of the
+# stage so a version bump only invalidates the final LABEL layer instead of
+# everything downstream of it.
+ARG VARIANT
 ARG IMAGE_DESCRIPTION="Marimo notebook server for Runpod GPU pods"
+# renovate: datasource=python-version depName=python
+ARG PYTHON_VERSION=3.13.13
 # renovate: datasource=pypi depName=marimo
 ARG MARIMO_VERSION=0.23.1
 # renovate: datasource=pypi depName=huggingface_hub
@@ -13,16 +36,19 @@ ARG TY_VERSION=0.0.31
 
 LABEL org.opencontainers.image.title="runpod-marimo" \
       org.opencontainers.image.description="${IMAGE_DESCRIPTION}" \
-      org.opencontainers.image.authors="brian.connelly@runpod.io" \
-      org.opencontainers.image.version="${IMAGE_VERSION}"
+      org.opencontainers.image.authors="brian.connelly@runpod.io"
 
 # Ensure Python output is immediately flushed to logs
 ENV PYTHONUNBUFFERED=1
 
 # ── System packages ──────────────────────────────────────────────────────────
-# jq is retained as a general-purpose interactive tool in the container
+# ca-certificates + curl are required for the tool downloads below.
+# openssh-server provides sshd and the /etc/init.d/ssh script used by
+# start_marimo.sh when PUBLIC_KEY is set.
+# jq is retained as a general-purpose interactive tool in the container.
 RUN apt-get update --yes && \
     DEBIAN_FRONTEND=noninteractive apt-get install --yes --no-install-recommends \
+        ca-certificates \
         git \
         curl \
         wget \
@@ -30,11 +56,17 @@ RUN apt-get update --yes && \
         jq \
         tmux \
         nodejs \
+        openssh-server \
         unzip \
     && if [ "${VARIANT}" = "gpu" ]; then \
         DEBIAN_FRONTEND=noninteractive apt-get install --yes --no-install-recommends nvtop; \
     fi \
     && rm -rf /var/lib/apt/lists/*
+
+# ── uv ───────────────────────────────────────────────────────────────────────
+# Copy the uv and uvx binaries from the named uv-dist stage above. Pins an
+# exact version for reproducibility and avoids an install script at build time.
+COPY --from=uv-dist /uv /uvx /usr/local/bin/
 
 # ── GitHub CLI ───────────────────────────────────────────────────────────────
 RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
@@ -81,19 +113,34 @@ RUN mkdir -p /home/runpod/workspace /home/runpod/.config/marimo && \
 
 # ── Runtime environment overrides ────────────────────────────────────────────
 # UV: explicit path so marimo can find uv for in-notebook package installation.
-# UV_CACHE_DIR / HF_HOME: the base image sets these to /workspace paths that
-# are root-owned and not writable by the runpod user when no volume is mounted.
-# Override both to user-owned locations so they work regardless of whether
-# /workspace is mounted.
+# UV_PYTHON_INSTALL_DIR: shared system location for uv-managed Python
+# interpreters so the same install is visible to root and the runpod user.
+# UV_CACHE_DIR / HF_HOME: user-owned locations that work regardless of
+# whether /workspace is mounted.
 #
 # NOTE: Docker ENV is not inherited by login shells (su -l). We write these
 # to /etc/profile.d/ so they are available to all login shells as well.
-ENV UV=/usr/bin/uv \
+ENV UV=/usr/local/bin/uv \
+    UV_PYTHON_INSTALL_DIR=/opt/uv-python \
     UV_CACHE_DIR=/home/runpod/.cache/uv \
     HF_HOME=/home/runpod/.cache/huggingface \
     MARIMO_VERSION=${MARIMO_VERSION}
-RUN printf 'export UV=/usr/bin/uv\nexport UV_CACHE_DIR=/home/runpod/.cache/uv\nexport HF_HOME=/home/runpod/.cache/huggingface\nexport MARIMO_VERSION=%s\nexport PATH="/home/runpod/.local/bin:$PATH"\n' \
+RUN printf 'export UV=/usr/local/bin/uv\nexport UV_PYTHON_INSTALL_DIR=/opt/uv-python\nexport UV_CACHE_DIR=/home/runpod/.cache/uv\nexport HF_HOME=/home/runpod/.cache/huggingface\nexport MARIMO_VERSION=%s\nexport PATH="/home/runpod/.local/bin:$PATH"\n' \
         "${MARIMO_VERSION}" > /etc/profile.d/runpod-env.sh
+
+# ── Python ───────────────────────────────────────────────────────────────────
+# uv manages CPython; no system python3 is installed. PYTHON_VERSION is
+# pinned to a full patch release so successive builds of the same image tag
+# resolve to the same interpreter; bump it explicitly to take patch updates.
+#
+# The install runs as the runpod user so uv's cache (UV_CACHE_DIR under
+# /home/runpod) stays user-owned — running as root would make the cache
+# unwritable for the later `uv tool install` step. /opt/uv-python is
+# pre-created and handed to runpod for the duration of the install, then
+# made world-readable so root can still read the interpreter metadata.
+RUN install -d -o runpod -g runpod /opt/uv-python && \
+    su -l runpod -c "uv python install ${PYTHON_VERSION}" && \
+    chmod -R a+rX /opt/uv-python
 
 # ── Python tools ─────────────────────────────────────────────────────────────
 # huggingface_hub is installed as an isolated uv tool for the runpod user.
@@ -113,5 +160,10 @@ EXPOSE 2971
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
     CMD curl -f http://localhost:2971/ || exit 1
+
+# Version label is set last so release bumps of IMAGE_VERSION only invalidate
+# the metadata layer, leaving the expensive apt/uv/Python layers cached.
+ARG IMAGE_VERSION=dev
+LABEL org.opencontainers.image.version="${IMAGE_VERSION}"
 
 CMD ["/start_marimo.sh"]
