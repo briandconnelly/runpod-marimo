@@ -54,7 +54,7 @@ shared_tests() {
         # present, matching whether the pod was launched with
         # MARIMO_TOKEN_PASSWORD set.
         if [[ "$MARIMO_CMD" == *--token-password* ]]; then
-            check "marimo --token-password (auth enabled)" "true"
+            check "marimo --token-password (auth enabled)"     "[[ '$MARIMO_CMD' == *--token-password* ]]"
             check "marimo NOT --no-token (mutually exclusive)" "[[ '$MARIMO_CMD' != *--no-token* ]]"
         else
             check "marimo --no-token (auth disabled, default)" "[[ '$MARIMO_CMD' == *--no-token* ]]"

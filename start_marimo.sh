@@ -108,19 +108,21 @@ WORKSPACE="${MARIMO_WORKSPACE:-/home/runpod/workspace}"
 #                        MARIMO_TOKEN_PASSWORD. Mutually exclusive with --no-token.
 # --sandbox            : run each notebook in an isolated uv environment derived from
 #                        its PEP 723 inline script metadata, ensuring reproducibility
+#
+# MARIMO_ARGS is interpolated into `su -l runpod -c "uvx ... $MARIMO_ARGS"` below,
+# so the string is re-parsed as a shell command by the su-invoked shell. Every
+# value substituted in from the environment (workspace path, token password) is
+# pre-escaped with `printf %q` so special characters survive that second parse
+# unchanged and cannot inject commands — this script runs as root, so unescaped
+# interpolation of user-controlled env vars would be a privilege-escalation hole.
 if [[ -n "${MARIMO_TOKEN_PASSWORD:-}" ]]; then
     echo "Token authentication enabled."
-    # printf '%q' shell-escapes so values containing quotes, $, whitespace,
-    # etc. are passed to marimo verbatim and cannot cause shell injection
-    # when interpolated into the su -c command string below.
     AUTH_FLAG=$(printf -- '--token-password %q' "$MARIMO_TOKEN_PASSWORD")
 else
     AUTH_FLAG="--no-token"
 fi
-# shellcheck disable=SC2086 # AUTH_FLAG is pre-escaped by printf %q above; the
-# unquoted expansion is intentional so --token-password and its value split
-# into two tokens. Quoting it would pass both as a single argument and break auth.
-MARIMO_ARGS="edit --host 0.0.0.0 --port 2971 ${AUTH_FLAG} --sandbox '${WORKSPACE}'"
+WORKSPACE_Q=$(printf '%q' "$WORKSPACE")
+MARIMO_ARGS="edit --host 0.0.0.0 --port 2971 ${AUTH_FLAG} --sandbox ${WORKSPACE_Q}"
 
 # MARIMO_VERSION is set at build time (Dockerfile ARG → ENV → /etc/profile.d/)
 # and pins the exact marimo release so the image is deterministic.
