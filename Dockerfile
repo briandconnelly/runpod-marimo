@@ -3,7 +3,7 @@
 # CPU variant: plain Ubuntu 24.04
 # VARIANT is passed at build time; the matching base stage is selected below.
 # renovate: datasource=docker depName=nvidia/cuda
-ARG CUDA_BASE_TAG=13.2.0-runtime-ubuntu24.04
+ARG CUDA_BASE_TAG=12.5.1-runtime-ubuntu24.04
 # renovate: datasource=docker depName=ubuntu
 ARG UBUNTU_BASE_TAG=24.04
 # renovate: datasource=docker depName=ghcr.io/astral-sh/uv
@@ -59,7 +59,8 @@ RUN apt-get update --yes && \
         openssh-server \
         unzip \
     && if [ "${VARIANT}" = "gpu" ]; then \
-        DEBIAN_FRONTEND=noninteractive apt-get install --yes --no-install-recommends nvtop; \
+        DEBIAN_FRONTEND=noninteractive apt-get install --yes --no-install-recommends nvtop && \
+        rm -f /cuda-keyring_1.1-1_all.deb; \
     fi \
     && rm -rf /var/lib/apt/lists/*
 
@@ -143,27 +144,23 @@ RUN install -d -o runpod -g runpod /opt/uv-python && \
     chmod -R a+rX /opt/uv-python
 
 # ── Python tools ─────────────────────────────────────────────────────────────
-# huggingface_hub is installed as an isolated uv tool for the runpod user.
-# marimo itself is NOT pre-installed; it is launched via uvx so it runs in
-# its own clean virtual environment (first launch populates the cache).
+# huggingface_hub and ty are installed as isolated uv tools for the runpod user.
+# marimo itself is NOT installed as a tool — it runs via uvx in its own
+# per-spec venv, which we pre-populate below so the first pod boot doesn't
+# block on marimo's download + install.
 RUN su -l runpod -c "uv tool install huggingface_hub==${HUGGINGFACE_HUB_VERSION} && uv tool install ty==${TY_VERSION}"
+
+# ── Marimo uvx cache warm-up ─────────────────────────────────────────────────
+# Populate uvx's per-spec tool-env cache so `uvx marimo[mcp,lsp]==VER` in
+# start_marimo.sh is a cache hit on first boot (saves ~1-2 minutes on a cold
+# pod). The cache key is the exact spec string, so this invocation must
+# match what start_marimo.sh uses. Users who override MARIMO_VERSION at
+# runtime pay the download cost once for their new version.
+RUN su -l runpod -c "uvx 'marimo[mcp,lsp]==${MARIMO_VERSION}' --version"
 
 # ── Marimo config ────────────────────────────────────────────────────────────
 COPY marimo.toml /home/runpod/.config/marimo/marimo.toml
 RUN chown runpod:runpod /home/runpod/.config/marimo/marimo.toml
-
-# ── MOTD ─────────────────────────────────────────────────────────────────────
-# Banner shown on login. motd.txt has ANSI color codes baked in (grey for the
-# separator lines, purple for the banner text) so /etc/motd is ready to print
-# as-is. SSH sessions pick it up via pam_motd; the profile.d hook covers the
-# Runpod web terminal and other non-SSH login shells.
-COPY motd.txt /etc/motd
-COPY <<'EOF' /etc/profile.d/motd.sh
-# Skip on SSH: pam_motd already prints /etc/motd for SSH sessions.
-[ -n "${SSH_CONNECTION:-}" ] && return 0 2>/dev/null
-[ -t 1 ] || return 0 2>/dev/null
-[ -r /etc/motd ] && cat /etc/motd
-EOF
 
 # ── Startup ──────────────────────────────────────────────────────────────────
 COPY start_marimo.sh /start_marimo.sh
@@ -171,7 +168,7 @@ RUN chmod +x /start_marimo.sh
 
 EXPOSE 2971
 
-HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=3 \
     CMD curl -f http://localhost:2971/ || exit 1
 
 # Version label is set last so release bumps of IMAGE_VERSION only invalidate

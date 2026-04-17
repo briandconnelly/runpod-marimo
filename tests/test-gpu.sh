@@ -14,7 +14,7 @@
 set -u
 
 # Keep in sync with the major version in CUDA_BASE_TAG (Dockerfile).
-EXPECTED_CUDA_MAJOR=13
+EXPECTED_CUDA_MAJOR=12
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=common.sh
