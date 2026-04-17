@@ -1,0 +1,25 @@
+# macOS
+.DS_Store
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Python (for local experiments)
+__pycache__/
+*.pyc
+.venv/
+.python-version
+
+# Logs
+*.log
+
+# Claude Code local overrides
+.claude/settings.local.json
