@@ -98,8 +98,12 @@ shared_tests() {
     # still win if set explicitly.
     local MARIMO_ENV_UV MARIMO_ENV_HF EXPECTED_CACHE_ROOT
     if [[ -n "$MARIMO_PID" ]]; then
-        MARIMO_ENV_UV=$(tr '\0' '\n' < /proc/"$MARIMO_PID"/environ | sed -n 's/^UV_CACHE_DIR=//p')
-        MARIMO_ENV_HF=$(tr '\0' '\n' < /proc/"$MARIMO_PID"/environ | sed -n 's/^HF_HOME=//p')
+        # /proc/<pid>/environ is ptrace-gated. Runpod containers do not
+        # grant CAP_SYS_PTRACE, so root cannot read another user's environ
+        # (EPERM). Read as the process owner instead — same pattern used
+        # above for /proc/<pid>/cwd.
+        MARIMO_ENV_UV=$(su -l runpod -c "tr '\0' '\n' < /proc/$MARIMO_PID/environ | sed -n 's/^UV_CACHE_DIR=//p'" 2>/dev/null || true)
+        MARIMO_ENV_HF=$(su -l runpod -c "tr '\0' '\n' < /proc/$MARIMO_PID/environ | sed -n 's/^HF_HOME=//p'" 2>/dev/null || true)
         check "marimo has UV_CACHE_DIR set" "test -n '$MARIMO_ENV_UV'"
         check "marimo has HF_HOME set"      "test -n '$MARIMO_ENV_HF'"
         if [[ -n "$MARIMO_ENV_UV" ]]; then
@@ -118,7 +122,16 @@ shared_tests() {
     fi
 
     section "HTTP endpoint"
-    check "health endpoint 2xx on :2971" "curl -sfo /dev/null http://localhost:2971/"
+    # First boot against an empty persistent cache (network volume + new
+    # UV_CACHE_DIR=/workspace/.cache/uv in 0.5.3) re-downloads marimo's
+    # sandbox deps before binding :2971, so a single-shot probe races
+    # warmup. Observed >6 min on a shared host under load; retry until a
+    # ~10-min wall-clock deadline. Per-attempt --connect-timeout /
+    # --max-time caps each curl so a stalled TCP-accepted-but-HTTP-hung
+    # server can't push total past the deadline. Wrapped in a subshell
+    # so `exit` stays local — `check` uses `eval` in the current shell.
+    check "health endpoint 2xx on :2971" \
+        "(deadline=\$((\$(date +%s) + 600)); while [[ \$(date +%s) -lt \$deadline ]]; do curl -sfo /dev/null --connect-timeout 3 --max-time 5 http://localhost:2971/ && exit 0; sleep 5; done; exit 1)"
 
     section "Marimo config"
     local MARIMO_TOML=/home/runpod/.config/marimo/marimo.toml
