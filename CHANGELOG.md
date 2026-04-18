@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Files uploaded through marimo's web UI now land in `$MARIMO_WORKSPACE` (default `/workspace`) instead of `/home/runpod`. The launcher used `su -l runpod` to start marimo, which drops cwd into runpod's home; marimo's `--sandbox <path>` arg only sets the file-browser root, so uploads and notebook-relative paths were resolving against cwd and silently landing in ephemeral container state. The launcher now `cd`'s into the workspace before exec'ing marimo.
+- Smoke test suite (`tests/common.sh`) no longer reports false-negative failures on healthy 0.5.3 pods. The `UV_CACHE_DIR` / `HF_HOME` checks read `/proc/$MARIMO_PID/environ` as root, which returns EPERM because Runpod containers do not grant `CAP_SYS_PTRACE`; the read is now performed as the `runpod` user (the process owner), matching how `/proc/$MARIMO_PID/cwd` is already read. The health-endpoint probe on `:2971` was a single-shot curl that raced the first-boot sandbox warmup on a freshly attached network volume (0.5.3's persistent `UV_CACHE_DIR=/workspace/.cache/uv` re-downloads marimo's deps into the empty volume cache before marimo binds the port); it now retries for up to ~3 minutes.
 
 ## [0.5.3] - 2026-04-17
 
