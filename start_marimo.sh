@@ -247,5 +247,11 @@ MARIMO_ARGS="edit --host 0.0.0.0 --port 2971 --no-token --sandbox ${WORKSPACE_Q}
 # value and the `[mcp,lsp]` glob characters from re-expansion by the su -l
 # shell, avoiding command injection through MARIMO_VERSION and spurious
 # glob matches against the runpod user's cwd.
+#
+# `cd $WORKSPACE` before exec: `su -l` lands in /home/runpod, but marimo's
+# file-upload destination and any relative paths resolved from notebook
+# code use the process cwd, not marimo's --sandbox arg. Without this cd,
+# files uploaded through marimo's UI land in /home/runpod (ephemeral
+# container state) even though the file browser shows /workspace.
 MARIMO_SPEC_Q=$(printf '%q' "marimo[mcp,lsp]==${MARIMO_VERSION}")
-exec su -l runpod -c "uvx ${MARIMO_SPEC_Q} $MARIMO_ARGS"
+exec su -l runpod -c "cd ${WORKSPACE_Q} && uvx ${MARIMO_SPEC_Q} $MARIMO_ARGS"

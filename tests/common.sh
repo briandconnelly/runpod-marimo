@@ -76,6 +76,18 @@ shared_tests() {
         if [[ -z "${MARIMO_WORKSPACE:-}" ]]; then
             check "marimo defaults workspace to /workspace" "[[ '$MARIMO_WS' == /workspace ]]"
         fi
+
+        # marimo's cwd must match its workspace arg. `su -l` lands in
+        # /home/runpod; without an explicit `cd` before exec, file
+        # uploads through marimo's UI and any relative paths resolved
+        # from notebook code end up in /home/runpod (ephemeral) even
+        # though the file browser shows the workspace. Read the cwd
+        # symlink as the process owner since /proc/<pid>/cwd is
+        # ptrace-gated and containers do not grant CAP_SYS_PTRACE to
+        # root.
+        local MARIMO_CWD
+        MARIMO_CWD=$(su -l runpod -c "readlink /proc/$MARIMO_PID/cwd" 2>/dev/null || true)
+        check "marimo cwd matches workspace" "[[ '$MARIMO_CWD' == '$MARIMO_WS' ]]"
     fi
 
     section "Cache locations"
