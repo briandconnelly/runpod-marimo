@@ -125,11 +125,13 @@ shared_tests() {
     # First boot against an empty persistent cache (network volume + new
     # UV_CACHE_DIR=/workspace/.cache/uv in 0.5.3) re-downloads marimo's
     # sandbox deps before binding :2971, so a single-shot probe races
-    # warmup. Observed >6 min on a shared host under load; retry up to
-    # ~10 min. Wrapped in a subshell so `exit` stays local — `check`
-    # uses `eval` in the current shell.
+    # warmup. Observed >6 min on a shared host under load; retry until a
+    # ~10-min wall-clock deadline. Per-attempt --connect-timeout /
+    # --max-time caps each curl so a stalled TCP-accepted-but-HTTP-hung
+    # server can't push total past the deadline. Wrapped in a subshell
+    # so `exit` stays local — `check` uses `eval` in the current shell.
     check "health endpoint 2xx on :2971" \
-        "(for i in {1..120}; do curl -sfo /dev/null http://localhost:2971/ && exit 0; sleep 5; done; exit 1)"
+        "(deadline=\$((\$(date +%s) + 600)); while [[ \$(date +%s) -lt \$deadline ]]; do curl -sfo /dev/null --connect-timeout 3 --max-time 5 http://localhost:2971/ && exit 0; sleep 5; done; exit 1)"
 
     section "Marimo config"
     local MARIMO_TOML=/home/runpod/.config/marimo/marimo.toml
