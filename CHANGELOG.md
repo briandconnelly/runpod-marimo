@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.4] - 2026-04-20
+
 ### Fixed
 
 - Files uploaded through marimo's web UI now land in `$MARIMO_WORKSPACE` (default `/workspace`) instead of `/home/runpod`. The launcher used `su -l runpod` to start marimo, which drops cwd into runpod's home; marimo's `--sandbox <path>` arg only sets the file-browser root, so uploads and notebook-relative paths were resolving against cwd and silently landing in ephemeral container state. The launcher now `cd`'s into the workspace before exec'ing marimo.
