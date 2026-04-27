@@ -7,7 +7,7 @@ ARG CUDA_BASE_TAG=12.5.1-runtime-ubuntu24.04
 # renovate: datasource=docker depName=ubuntu
 ARG UBUNTU_BASE_TAG=24.04
 # renovate: datasource=docker depName=ghcr.io/astral-sh/uv
-ARG UV_VERSION=0.11.7
+ARG UV_VERSION=0.11.8
 ARG VARIANT=gpu
 
 # Named stage for the uv binary distribution. A named stage is used rather
