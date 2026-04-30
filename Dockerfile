@@ -92,7 +92,7 @@ RUN curl -fsSL "https://github.com/duckdb/duckdb/releases/download/${DUCKDB_VERS
 
 # ── runpodctl ────────────────────────────────────────────────────────────────
 # renovate: datasource=github-releases depName=runpod/runpodctl
-ARG RUNPODCTL_VERSION=v2.1.9
+ARG RUNPODCTL_VERSION=v2.2.0
 ARG RUNPODCTL_SHA256=777c0475f9966b341af2c4cc17a3c730a2a2655aa0e14c86bb9929cca89846a5
 RUN curl -fsSL "https://github.com/runpod/runpodctl/releases/download/${RUNPODCTL_VERSION}/runpodctl-linux-amd64" \
         -o /usr/local/bin/runpodctl && \
