@@ -28,7 +28,7 @@ ARG IMAGE_DESCRIPTION="Marimo notebook server for Runpod GPU pods"
 # renovate: datasource=python-version depName=python
 ARG PYTHON_VERSION=3.13.13
 # renovate: datasource=pypi depName=marimo
-ARG MARIMO_VERSION=0.23.1
+ARG MARIMO_VERSION=0.23.5
 # renovate: datasource=pypi depName=huggingface_hub
 ARG HUGGINGFACE_HUB_VERSION=1.11.0
 # renovate: datasource=pypi depName=ty
