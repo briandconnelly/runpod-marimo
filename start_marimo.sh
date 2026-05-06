@@ -1,5 +1,5 @@
 #!/bin/bash
-set -u
+set -Eeuo pipefail
 
 # Optional user hook that runs before services (SSH, env forwarding) start.
 # Treated as a required setup step: any failure aborts startup.
@@ -102,6 +102,8 @@ _validate_path_var() {
 }
 [[ -n "${MARIMO_WORKSPACE:-}" ]] && _validate_path_var MARIMO_WORKSPACE "$MARIMO_WORKSPACE"
 [[ -n "${MARIMO_CACHE_DIR:-}" ]] && _validate_path_var MARIMO_CACHE_DIR "$MARIMO_CACHE_DIR"
+[[ -n "${UV_CACHE_DIR:-}" ]] && _validate_path_var UV_CACHE_DIR "$UV_CACHE_DIR"
+[[ -n "${HF_HOME:-}" ]] && _validate_path_var HF_HOME "$HF_HOME"
 
 # Ensure a directory exists and is owned by the runpod user. Only chowns
 # directories we created on this boot, to avoid changing ownership of
@@ -177,6 +179,11 @@ _probe_runpod_writable "HF_HOME" "$HF_HOME"
 # runpod-env.sh so user overrides take precedence over build-time defaults
 # (in C locale, digits sort before letters, so a numeric prefix would not
 # achieve this).
+#
+# NOTE: nearly all pod env vars — including API keys and other credentials —
+# are forwarded into the marimo/SSH login shell environment. This is intentional
+# (users set API keys as pod env vars precisely to use them in notebooks), but
+# means any credential set on the pod is accessible from notebook code.
 _forward_env() {
     while IFS= read -r -d '' entry; do
         local key="${entry%%=*}"

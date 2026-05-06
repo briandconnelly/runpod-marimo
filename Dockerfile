@@ -70,14 +70,15 @@ RUN apt-get update --yes && \
 COPY --from=uv-dist /uv /uvx /usr/local/bin/
 
 # ── GitHub CLI ───────────────────────────────────────────────────────────────
-RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
-        | dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg && \
-    chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg && \
-    echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
-        | tee /etc/apt/sources.list.d/github-cli.list > /dev/null && \
-    apt-get update --yes && \
-    DEBIAN_FRONTEND=noninteractive apt-get install --yes gh && \
-    rm -rf /var/lib/apt/lists/*
+# renovate: datasource=github-releases depName=cli/cli
+ARG GH_VERSION=v2.92.0
+ARG GH_SHA256=b57848131bdf0c229cd35e1f2a51aa718199858b2e728410b37e89a428943ec4
+RUN curl -fsSL "https://github.com/cli/cli/releases/download/${GH_VERSION}/gh_${GH_VERSION#v}_linux_amd64.tar.gz" \
+        -o /tmp/gh.tar.gz && \
+    echo "${GH_SHA256}  /tmp/gh.tar.gz" | sha256sum -c && \
+    tar -xzf /tmp/gh.tar.gz -C /tmp && \
+    install -m 755 "/tmp/gh_${GH_VERSION#v}_linux_amd64/bin/gh" /usr/local/bin/gh && \
+    rm -rf /tmp/gh.tar.gz "/tmp/gh_${GH_VERSION#v}_linux_amd64"
 
 # ── DuckDB CLI ───────────────────────────────────────────────────────────────
 # renovate: datasource=github-releases depName=duckdb/duckdb

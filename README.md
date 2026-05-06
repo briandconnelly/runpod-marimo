@@ -9,8 +9,8 @@ The image is published in two variants from a single Dockerfile:
 
 | Variant | Base image | Tag examples |
 |---|---|---|
-| GPU | `nvidia/cuda:*-runtime-ubuntu24.04` | `0.5.0`, `0.5`, `0.5.0-gpu`, `0.5-gpu` |
-| CPU | `ubuntu:24.04` | `0.5.0-cpu`, `0.5-cpu` |
+| GPU | `nvidia/cuda:*-runtime-ubuntu24.04` | `0.5.5`, `0.5`, `0.5.5-gpu`, `0.5-gpu` |
+| CPU | `ubuntu:24.04` | `0.5.5-cpu`, `0.5-cpu` |
 
 Bare version tags (without a `-gpu` or `-cpu` suffix) resolve to the GPU variant.
 
@@ -56,6 +56,9 @@ Access to the marimo server is gated by Runpod's proxy.
 By default the image launches marimo with `--no-token` (no additional password required).
 Set `MARIMO_TOKEN_PASSWORD` to require a password before the marimo UI is accessible.
 Note that the password is passed as a command-line argument and is visible in `ps` output and `/proc/<pid>/cmdline` on the pod; it is not forwarded to SSH or notebook shells.
+
+> **Environment variable forwarding:** all environment variables set on the pod — including API keys and other credentials — are forwarded into the marimo and SSH login shell environments so that notebook code can reach them.
+> Be aware that any secret set on the pod is accessible from notebook code.
 
 ## What is included
 

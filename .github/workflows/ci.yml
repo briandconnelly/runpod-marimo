@@ -8,7 +8,6 @@ on:
       - ".gitignore"
       - ".claude/**"
       - "renovate.json"
-      - "tests/**"
 
 jobs:
   build:
@@ -46,3 +45,42 @@ jobs:
             IMAGE_DESCRIPTION=${{ matrix.description }}
           cache-from: type=gha,scope=${{ matrix.variant }}
           cache-to: type=gha,mode=max,scope=${{ matrix.variant }}
+
+  smoke-test:
+    runs-on: ubuntu-latest
+    needs: build
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      actions: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Build CPU image for smoke test
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: false
+          load: true
+          platforms: linux/amd64
+          tags: runpod-marimo:smoke-test
+          build-args: |
+            VARIANT=cpu
+            IMAGE_DESCRIPTION=Marimo notebook server for Runpod CPU pods
+          cache-from: type=gha,scope=cpu
+
+      - name: Run CPU smoke tests
+        run: |
+          docker run -d --name marimo-ci \
+            -v "$(pwd)/tests:/tests:ro" \
+            -e MARIMO_CACHE_DIR=/home/runpod/.cache \
+            runpod-marimo:smoke-test
+          docker exec marimo-ci bash /tests/test-cpu.sh
+          docker rm -f marimo-ci
