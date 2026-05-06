@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-05-06
+
+### Added
+
+- `MARIMO_TOKEN_PASSWORD` environment variable re-introduced.
+  Set it to require a password before the marimo UI is accessible.
+  This feature was removed in 0.5.1 because marimo's login redirect used the raw `Host` header, which Runpod's proxy sets to an internal overlay address, making the redirect URL unreachable in browsers.
+  Both upstream issues are now fixed in marimo 0.23.5 ([#9249](https://github.com/marimo-team/marimo/issues/9249), [#9250](https://github.com/marimo-team/marimo/issues/9250)).
+
+### Added
+
+- `MARIMO_TOKEN_PASSWORD` environment variable re-introduced.
+  Set it to require a password before the marimo UI is accessible.
+  This feature was removed in 0.5.1 because marimo's login redirect used the raw `Host` header, which Runpod's proxy sets to an internal overlay address, making the redirect URL unreachable in browsers.
+  Both upstream issues are now fixed in marimo 0.23.5 ([#9249](https://github.com/marimo-team/marimo/issues/9249), [#9250](https://github.com/marimo-team/marimo/issues/9250)).
+- CPU smoke tests now run in CI on every pull request and before every image publish, so a broken startup script can no longer be merged or released undetected.
+- `UV_CACHE_DIR` and `HF_HOME`, when set explicitly as pod env vars, are now validated against system paths with the same logic already applied to `MARIMO_WORKSPACE` and `MARIMO_CACHE_DIR`.
+
+### Changed
+
+- Updated marimo to 0.23.5.
+- Updated uv to 0.11.11.
+- Updated huggingface_hub to 1.14.0.
+- Updated ty to 0.0.34.
+- Updated runpodctl to v2.2.0.
+- GitHub CLI (`gh`) is now installed from a pinned release tarball with checksum verification (v2.92.0), consistent with how duckdb and runpodctl are installed. Previously it was pulled from GitHub's apt repository without a pinned version, so rebuilding the same image tag could silently pick up a newer `gh`.
+- `start_marimo.sh` now uses `set -Eeuo pipefail` instead of `set -u`, so unexpected failures exit immediately rather than continuing in a partially-initialized state.
+
 ## [0.5.4] - 2026-04-20
 
 ### Fixed

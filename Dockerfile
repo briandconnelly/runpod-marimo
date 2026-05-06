@@ -7,7 +7,7 @@ ARG CUDA_BASE_TAG=12.5.1-runtime-ubuntu24.04
 # renovate: datasource=docker depName=ubuntu
 ARG UBUNTU_BASE_TAG=24.04
 # renovate: datasource=docker depName=ghcr.io/astral-sh/uv
-ARG UV_VERSION=0.11.7
+ARG UV_VERSION=0.11.11
 ARG VARIANT=gpu
 
 # Named stage for the uv binary distribution. A named stage is used rather
@@ -28,11 +28,11 @@ ARG IMAGE_DESCRIPTION="Marimo notebook server for Runpod GPU pods"
 # renovate: datasource=python-version depName=python
 ARG PYTHON_VERSION=3.13.13
 # renovate: datasource=pypi depName=marimo
-ARG MARIMO_VERSION=0.23.1
+ARG MARIMO_VERSION=0.23.5
 # renovate: datasource=pypi depName=huggingface_hub
-ARG HUGGINGFACE_HUB_VERSION=1.11.0
+ARG HUGGINGFACE_HUB_VERSION=1.14.0
 # renovate: datasource=pypi depName=ty
-ARG TY_VERSION=0.0.31
+ARG TY_VERSION=0.0.34
 
 LABEL org.opencontainers.image.title="runpod-marimo" \
       org.opencontainers.image.description="${IMAGE_DESCRIPTION}" \
@@ -70,14 +70,15 @@ RUN apt-get update --yes && \
 COPY --from=uv-dist /uv /uvx /usr/local/bin/
 
 # ── GitHub CLI ───────────────────────────────────────────────────────────────
-RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
-        | dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg && \
-    chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg && \
-    echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" \
-        | tee /etc/apt/sources.list.d/github-cli.list > /dev/null && \
-    apt-get update --yes && \
-    DEBIAN_FRONTEND=noninteractive apt-get install --yes gh && \
-    rm -rf /var/lib/apt/lists/*
+# renovate: datasource=github-releases depName=cli/cli
+ARG GH_VERSION=v2.92.0
+ARG GH_SHA256=b57848131bdf0c229cd35e1f2a51aa718199858b2e728410b37e89a428943ec4
+RUN curl -fsSL "https://github.com/cli/cli/releases/download/${GH_VERSION}/gh_${GH_VERSION#v}_linux_amd64.tar.gz" \
+        -o /tmp/gh.tar.gz && \
+    echo "${GH_SHA256}  /tmp/gh.tar.gz" | sha256sum -c && \
+    tar -xzf /tmp/gh.tar.gz -C /tmp && \
+    install -m 755 "/tmp/gh_${GH_VERSION#v}_linux_amd64/bin/gh" /usr/local/bin/gh && \
+    rm -rf /tmp/gh.tar.gz "/tmp/gh_${GH_VERSION#v}_linux_amd64"
 
 # ── DuckDB CLI ───────────────────────────────────────────────────────────────
 # renovate: datasource=github-releases depName=duckdb/duckdb
@@ -92,8 +93,8 @@ RUN curl -fsSL "https://github.com/duckdb/duckdb/releases/download/${DUCKDB_VERS
 
 # ── runpodctl ────────────────────────────────────────────────────────────────
 # renovate: datasource=github-releases depName=runpod/runpodctl
-ARG RUNPODCTL_VERSION=v2.1.9
-ARG RUNPODCTL_SHA256=777c0475f9966b341af2c4cc17a3c730a2a2655aa0e14c86bb9929cca89846a5
+ARG RUNPODCTL_VERSION=v2.2.0
+ARG RUNPODCTL_SHA256=4e1f0bd4d1dbcfe584eba9306ec921a04a5a976127dfa3aebbd9c549e9b81e27
 RUN curl -fsSL "https://github.com/runpod/runpodctl/releases/download/${RUNPODCTL_VERSION}/runpodctl-linux-amd64" \
         -o /usr/local/bin/runpodctl && \
     echo "${RUNPODCTL_SHA256}  /usr/local/bin/runpodctl" | sha256sum -c && \

@@ -59,7 +59,13 @@ shared_tests() {
         check "marimo --sandbox"          "[[ '$MARIMO_CMD' == *--sandbox* ]]"
         check "marimo --host 0.0.0.0"     "[[ '$MARIMO_CMD' == *'--host 0.0.0.0'* ]]"
         check "marimo --port 2971"        "[[ '$MARIMO_CMD' == *'--port 2971'* ]]"
-        check "marimo --no-token"         "[[ '$MARIMO_CMD' == *--no-token* ]]"
+        if [[ "$MARIMO_CMD" == *--token-password* ]]; then
+            check "marimo --token-password present"   "[[ '$MARIMO_CMD' == *--token-password* ]]"
+            check "marimo --no-token absent"          "[[ '$MARIMO_CMD' != *--no-token* ]]"
+        else
+            check "marimo --no-token present"         "[[ '$MARIMO_CMD' == *--no-token* ]]"
+            check "marimo --token-password absent"    "[[ '$MARIMO_CMD' != *--token-password* ]]"
+        fi
 
         # The workspace path is the last positional argument to marimo
         # edit. Read it from /proc/PID/cmdline (NUL-separated, verbatim)

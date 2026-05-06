@@ -9,8 +9,8 @@ The image is published in two variants from a single Dockerfile:
 
 | Variant | Base image | Tag examples |
 |---|---|---|
-| GPU | `nvidia/cuda:*-runtime-ubuntu24.04` | `0.5.0`, `0.5`, `0.5.0-gpu`, `0.5-gpu` |
-| CPU | `ubuntu:24.04` | `0.5.0-cpu`, `0.5-cpu` |
+| GPU | `nvidia/cuda:*-runtime-ubuntu24.04` | `0.6.0`, `0.5`, `0.6.0-gpu`, `0.5-gpu` |
+| CPU | `ubuntu:24.04` | `0.6.0-cpu`, `0.5-cpu` |
 
 Bare version tags (without a `-gpu` or `-cpu` suffix) resolve to the GPU variant.
 
@@ -32,6 +32,7 @@ Pre-installing packages would allow imports that work in the pod but have no rec
 |---|---|---|
 | `MARIMO_WORKSPACE` | Path to open in marimo's file browser | `/workspace` |
 | `MARIMO_CACHE_DIR` | Parent directory for uv and Hugging Face caches | `$MARIMO_WORKSPACE/.cache` |
+| `MARIMO_TOKEN_PASSWORD` | Password required to access the marimo UI; unset by default (no password) | _(unset)_ |
 
 `/workspace` is where Runpod mounts network volumes, so notebooks created through the file browser automatically persist across pod stop/start when a volume is attached.
 Without a volume, `/workspace` is a regular container directory (ephemeral).
@@ -51,7 +52,13 @@ That restores ephemeral container-local caches. The image's prewarmed `uvx marim
 
 > **Shared volumes:** `HF_HOME` stores the Hugging Face auth token (`~/.cache/huggingface/token`), so a volume shared between pods will also share whoever is currently logged in with `huggingface-cli login`. If that's not what you want, keep `HF_HOME` off the shared volume (`HF_HOME=/home/runpod/.cache/huggingface`) while leaving `UV_CACHE_DIR` wherever you want it.
 
-Access to the marimo server is gated by Runpod's proxy; the image launches marimo with `--no-token` and does not expose marimo's built-in authentication.
+Access to the marimo server is gated by Runpod's proxy.
+By default the image launches marimo with `--no-token` (no additional password required).
+Set `MARIMO_TOKEN_PASSWORD` to require a password before the marimo UI is accessible.
+Note that the password is passed as a command-line argument and is visible in `ps` output and `/proc/<pid>/cmdline` on the pod; it is not forwarded to SSH or notebook shells.
+
+> **Environment variable forwarding:** all environment variables set on the pod — including API keys and other credentials — are forwarded into the marimo and SSH login shell environments so that notebook code can reach them.
+> Be aware that any secret set on the pod is accessible from notebook code.
 
 ## What is included
 
