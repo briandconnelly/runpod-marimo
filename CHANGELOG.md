@@ -7,14 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.5] - 2026-05-06
+
 ### Added
 
 - `MARIMO_TOKEN_PASSWORD` environment variable re-introduced.
   Set it to require a password before the marimo UI is accessible.
   This feature was removed in 0.5.1 because marimo's login redirect used the raw `Host` header, which Runpod's proxy sets to an internal overlay address, making the redirect URL unreachable in browsers.
   Both upstream issues are now fixed in marimo 0.23.5 ([#9249](https://github.com/marimo-team/marimo/issues/9249), [#9250](https://github.com/marimo-team/marimo/issues/9250)).
-
-## [0.5.5] - 2026-05-06
 
 ### Changed
 
