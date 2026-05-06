@@ -10,6 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Updated marimo to 0.23.5.
+- Updated uv to 0.11.11.
+- Updated huggingface_hub to 1.14.0.
+- Updated ty to 0.0.34.
+- Updated runpodctl to v2.2.0.
 
 ## [0.5.4] - 2026-04-20
 

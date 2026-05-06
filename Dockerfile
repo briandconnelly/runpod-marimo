@@ -7,7 +7,7 @@ ARG CUDA_BASE_TAG=12.5.1-runtime-ubuntu24.04
 # renovate: datasource=docker depName=ubuntu
 ARG UBUNTU_BASE_TAG=24.04
 # renovate: datasource=docker depName=ghcr.io/astral-sh/uv
-ARG UV_VERSION=0.11.7
+ARG UV_VERSION=0.11.11
 ARG VARIANT=gpu
 
 # Named stage for the uv binary distribution. A named stage is used rather
@@ -30,9 +30,9 @@ ARG PYTHON_VERSION=3.13.13
 # renovate: datasource=pypi depName=marimo
 ARG MARIMO_VERSION=0.23.5
 # renovate: datasource=pypi depName=huggingface_hub
-ARG HUGGINGFACE_HUB_VERSION=1.11.0
+ARG HUGGINGFACE_HUB_VERSION=1.14.0
 # renovate: datasource=pypi depName=ty
-ARG TY_VERSION=0.0.31
+ARG TY_VERSION=0.0.34
 
 LABEL org.opencontainers.image.title="runpod-marimo" \
       org.opencontainers.image.description="${IMAGE_DESCRIPTION}" \
@@ -92,7 +92,7 @@ RUN curl -fsSL "https://github.com/duckdb/duckdb/releases/download/${DUCKDB_VERS
 
 # ── runpodctl ────────────────────────────────────────────────────────────────
 # renovate: datasource=github-releases depName=runpod/runpodctl
-ARG RUNPODCTL_VERSION=v2.1.9
+ARG RUNPODCTL_VERSION=v2.2.0
 ARG RUNPODCTL_SHA256=777c0475f9966b341af2c4cc17a3c730a2a2655aa0e14c86bb9929cca89846a5
 RUN curl -fsSL "https://github.com/runpod/runpodctl/releases/download/${RUNPODCTL_VERSION}/runpodctl-linux-amd64" \
         -o /usr/local/bin/runpodctl && \
