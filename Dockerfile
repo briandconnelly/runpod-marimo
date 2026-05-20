@@ -82,7 +82,7 @@ RUN curl -fsSL "https://github.com/cli/cli/releases/download/${GH_VERSION}/gh_${
 
 # ── DuckDB CLI ───────────────────────────────────────────────────────────────
 # renovate: datasource=github-releases depName=duckdb/duckdb
-ARG DUCKDB_VERSION=v1.5.2
+ARG DUCKDB_VERSION=v1.5.3
 ARG DUCKDB_SHA256=fc9145affabca627431e73ddaf6b8117e5c192692480c13886f227be202d5d15
 RUN curl -fsSL "https://github.com/duckdb/duckdb/releases/download/${DUCKDB_VERSION}/duckdb_cli-linux-amd64.zip" \
         -o /tmp/duckdb.zip && \
