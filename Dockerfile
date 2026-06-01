@@ -30,7 +30,7 @@ ARG PYTHON_VERSION=3.13.13
 # renovate: datasource=pypi depName=marimo
 ARG MARIMO_VERSION=0.23.8
 # renovate: datasource=pypi depName=huggingface_hub
-ARG HUGGINGFACE_HUB_VERSION=1.14.0
+ARG HUGGINGFACE_HUB_VERSION=1.17.0
 # renovate: datasource=pypi depName=ty
 ARG TY_VERSION=0.0.40
 
@@ -72,7 +72,7 @@ COPY --from=uv-dist /uv /uvx /usr/local/bin/
 # ── GitHub CLI ───────────────────────────────────────────────────────────────
 # renovate: datasource=github-releases depName=cli/cli
 ARG GH_VERSION=v2.93.0
-ARG GH_SHA256=b57848131bdf0c229cd35e1f2a51aa718199858b2e728410b37e89a428943ec4
+ARG GH_SHA256=02d1290eba130e0b896f3709ffff22e1c75a51475ddb70476a85abc6b5807af0
 RUN curl -fsSL "https://github.com/cli/cli/releases/download/${GH_VERSION}/gh_${GH_VERSION#v}_linux_amd64.tar.gz" \
         -o /tmp/gh.tar.gz && \
     echo "${GH_SHA256}  /tmp/gh.tar.gz" | sha256sum -c && \
@@ -82,8 +82,8 @@ RUN curl -fsSL "https://github.com/cli/cli/releases/download/${GH_VERSION}/gh_${
 
 # ── DuckDB CLI ───────────────────────────────────────────────────────────────
 # renovate: datasource=github-releases depName=duckdb/duckdb
-ARG DUCKDB_VERSION=v1.5.2
-ARG DUCKDB_SHA256=fc9145affabca627431e73ddaf6b8117e5c192692480c13886f227be202d5d15
+ARG DUCKDB_VERSION=v1.5.3
+ARG DUCKDB_SHA256=35caef1fecbc8d7e2c07de4fd2cdefc5189ec9ba9e1cca228fb1a1c48cc52a8a
 RUN curl -fsSL "https://github.com/duckdb/duckdb/releases/download/${DUCKDB_VERSION}/duckdb_cli-linux-amd64.zip" \
         -o /tmp/duckdb.zip && \
     echo "${DUCKDB_SHA256}  /tmp/duckdb.zip" | sha256sum -c && \
@@ -93,8 +93,8 @@ RUN curl -fsSL "https://github.com/duckdb/duckdb/releases/download/${DUCKDB_VERS
 
 # ── runpodctl ────────────────────────────────────────────────────────────────
 # renovate: datasource=github-releases depName=runpod/runpodctl
-ARG RUNPODCTL_VERSION=v2.2.0
-ARG RUNPODCTL_SHA256=4e1f0bd4d1dbcfe584eba9306ec921a04a5a976127dfa3aebbd9c549e9b81e27
+ARG RUNPODCTL_VERSION=v2.3.0
+ARG RUNPODCTL_SHA256=fdac0b7a0ac4d4b5b9ef1203f9229c99313e212ac8689701a29e4ba05fae32b8
 RUN curl -fsSL "https://github.com/runpod/runpodctl/releases/download/${RUNPODCTL_VERSION}/runpodctl-linux-amd64" \
         -o /usr/local/bin/runpodctl && \
     echo "${RUNPODCTL_SHA256}  /usr/local/bin/runpodctl" | sha256sum -c && \
