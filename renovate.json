@@ -16,7 +16,7 @@
   "packageRules": [
     {
       "description": "Remind about SHA256 checksum updates for binary downloads",
-      "matchDepNames": ["duckdb/duckdb", "runpod/runpodctl"],
+      "matchDepNames": ["duckdb/duckdb", "runpod/runpodctl", "cli/cli"],
       "prBodyNotes": [
         "This package uses SHA256 checksum verification in the Dockerfile. Download the new binary and update the corresponding `_SHA256` ARG before merging."
       ]
