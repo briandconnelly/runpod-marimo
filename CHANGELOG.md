@@ -13,6 +13,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Updated DuckDB to v1.5.3.
 - Updated huggingface_hub to 1.17.0.
 
+### Fixed
+
+- Corrected the GitHub CLI (`gh`) `GH_SHA256` checksum, which was left at the v2.92.0 value when `gh` was bumped to v2.93.0. The stale checksum failed the `sha256sum -c` verification and broke every image build.
+
 ## [0.6.0] - 2026-05-06
 
 ### Added
