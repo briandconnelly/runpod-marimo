@@ -1,4 +1,4 @@
-# CLAUDE.md
+# Runpod Marimo Templates
 
 ## Project purpose
 
