@@ -1,0 +1,10 @@
+ignored:
+  # Pinning apt package versions is impractical against Ubuntu's rolling
+  # archive: pinned versions disappear when the archive moves on, breaking
+  # rebuilds. Reproducibility for user-facing packages is handled by uv and
+  # the checksum-pinned tool downloads instead.
+  - DL3008
+  # Consecutive RUN instructions are deliberate cache layer boundaries
+  # (e.g. the uv Python install vs. the marimo uvx cache warm-up), so a
+  # version bump invalidates as little as possible.
+  - DL3059

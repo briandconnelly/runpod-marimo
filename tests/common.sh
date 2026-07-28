@@ -1,3 +1,4 @@
+# shellcheck shell=bash
 # Shared helpers and test sections for runpod-marimo smoke tests.
 # Sourced by tests/test-cpu.sh and tests/test-gpu.sh.
 
@@ -59,12 +60,31 @@ shared_tests() {
         check "marimo --sandbox"          "[[ '$MARIMO_CMD' == *--sandbox* ]]"
         check "marimo --host 0.0.0.0"     "[[ '$MARIMO_CMD' == *'--host 0.0.0.0'* ]]"
         check "marimo --port 2971"        "[[ '$MARIMO_CMD' == *'--port 2971'* ]]"
-        if [[ "$MARIMO_CMD" == *--token-password* ]]; then
-            check "marimo --token-password present"   "[[ '$MARIMO_CMD' == *--token-password* ]]"
-            check "marimo --no-token absent"          "[[ '$MARIMO_CMD' != *--no-token* ]]"
+        # Token auth is on by default; --no-token appears only when the pod
+        # explicitly opted out with MARIMO_DISABLE_AUTH=true. The resolved
+        # token travels via --token-password-file (never a bare
+        # --token-password flag, which would leak it into `ps`).
+        local TOKEN_FILE=/home/runpod/.config/marimo/token
+        if [[ "${MARIMO_DISABLE_AUTH:-}" == "true" ]]; then
+            check "marimo --no-token present (auth disabled)" "[[ '$MARIMO_CMD' == *--no-token* ]]"
+            check "marimo --token-password-file absent"       "[[ '$MARIMO_CMD' != *--token-password-file* ]]"
         else
-            check "marimo --no-token present"         "[[ '$MARIMO_CMD' == *--no-token* ]]"
-            check "marimo --token-password absent"    "[[ '$MARIMO_CMD' != *--token-password* ]]"
+            check "marimo --token-password-file present" "[[ '$MARIMO_CMD' == *--token-password-file* ]]"
+            check "marimo --no-token absent"             "[[ '$MARIMO_CMD' != *--no-token* ]]"
+            check "token not on the command line"        "[[ '$MARIMO_CMD' != *'--token-password '* ]]"
+            check "token file non-empty"                 "test -s $TOKEN_FILE"
+            check "token file owned by runpod"           "[[ \$(stat -c %U $TOKEN_FILE) == runpod ]]"
+            check "token file mode 0600"                 "[[ \$(stat -c %a $TOKEN_FILE) == 600 ]]"
+            # Resolution order: MARIMO_TOKEN_PASSWORD wins, then
+            # JUPYTER_PASSWORD, then a generated token (content unknowable
+            # here, so only the two deterministic sources are asserted).
+            if [[ -n "${MARIMO_TOKEN_PASSWORD:-}" ]]; then
+                check "token file matches MARIMO_TOKEN_PASSWORD" \
+                    "[[ \$(cat $TOKEN_FILE) == \"\$MARIMO_TOKEN_PASSWORD\" ]]"
+            elif [[ -n "${JUPYTER_PASSWORD:-}" ]]; then
+                check "token file matches JUPYTER_PASSWORD fallback" \
+                    "[[ \$(cat $TOKEN_FILE) == \"\$JUPYTER_PASSWORD\" ]]"
+            fi
         fi
 
         # The workspace path is the last positional argument to marimo
@@ -128,6 +148,8 @@ shared_tests() {
     fi
 
     section "HTTP endpoint"
+    # /health is served 200 without authentication, so this probe works
+    # identically whether token auth is on (default) or disabled.
     # First boot against an empty persistent cache (network volume + new
     # UV_CACHE_DIR=/workspace/.cache/uv in 0.5.3) re-downloads marimo's
     # sandbox deps before binding :2971, so a single-shot probe races
@@ -137,7 +159,18 @@ shared_tests() {
     # server can't push total past the deadline. Wrapped in a subshell
     # so `exit` stays local — `check` uses `eval` in the current shell.
     check "health endpoint 2xx on :2971" \
-        "(deadline=\$((\$(date +%s) + 600)); while [[ \$(date +%s) -lt \$deadline ]]; do curl -sfo /dev/null --connect-timeout 3 --max-time 5 http://localhost:2971/ && exit 0; sleep 5; done; exit 1)"
+        "(deadline=\$((\$(date +%s) + 600)); while [[ \$(date +%s) -lt \$deadline ]]; do curl -sfo /dev/null --connect-timeout 3 --max-time 5 http://localhost:2971/health && exit 0; sleep 5; done; exit 1)"
+    if [[ "${MARIMO_DISABLE_AUTH:-}" != "true" ]]; then
+        # Verify the auth boundary end-to-end: the API must reject
+        # unauthenticated requests and accept the resolved token.
+        # --data-urlencode with -G reads the token from the file and
+        # URL-encodes it, so user-chosen passwords with special
+        # characters survive the round trip.
+        check "API rejects unauthenticated requests" \
+            "[[ \$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 http://localhost:2971/api/status) == 401 ]]"
+        check "API accepts the resolved token" \
+            "[[ \$(curl -sG -o /dev/null -w '%{http_code}' --max-time 5 --data-urlencode access_token@/home/runpod/.config/marimo/token http://localhost:2971/api/status) == 200 ]]"
+    fi
 
     section "Marimo config"
     local MARIMO_TOML=/home/runpod/.config/marimo/marimo.toml
@@ -157,6 +190,7 @@ shared_tests() {
     check "zz-pod-env.sh does not leak PUBLIC_KEY"            "! grep -q '^export PUBLIC_KEY' $ZZ_ENV"
     check "zz-pod-env.sh does not leak JUPYTER_PASSWORD"      "! grep -q '^export JUPYTER_PASSWORD' $ZZ_ENV"
     check "zz-pod-env.sh does not leak MARIMO_TOKEN_PASSWORD" "! grep -q '^export MARIMO_TOKEN_PASSWORD' $ZZ_ENV"
+    check "zz-pod-env.sh does not leak MARIMO_DISABLE_AUTH"   "! grep -q '^export MARIMO_DISABLE_AUTH' $ZZ_ENV"
 
     section "User and permissions"
     check "runpod user exists"            "id runpod"
@@ -187,6 +221,7 @@ shared_tests() {
     # PEP 723 header, at which point it ships into the sandbox venv's own
     # site-packages by design.
     local SBX_VENV PY
+    # shellcheck disable=SC2012  # mtime sort is the point; the glob is a fixed /tmp pattern
     SBX_VENV=$(ls -dt /tmp/marimo-sandbox-*/venv 2>/dev/null | head -1 || true)
     if [[ -n "$SBX_VENV" ]]; then
         PY="$SBX_VENV/bin/python"

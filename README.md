@@ -32,7 +32,8 @@ Pre-installing packages would allow imports that work in the pod but have no rec
 |---|---|---|
 | `MARIMO_WORKSPACE` | Path to open in marimo's file browser | `/workspace` |
 | `MARIMO_CACHE_DIR` | Parent directory for uv and Hugging Face caches | `$MARIMO_WORKSPACE/.cache` |
-| `MARIMO_TOKEN_PASSWORD` | Password required to access the marimo UI; unset by default (no password) | _(unset)_ |
+| `MARIMO_TOKEN_PASSWORD` | Password required to access the marimo UI | _(falls back to `JUPYTER_PASSWORD`, else a generated token)_ |
+| `MARIMO_DISABLE_AUTH` | Set to `true` to disable marimo's token authentication entirely | `false` |
 
 `/workspace` is where Runpod mounts network volumes, so notebooks created through the file browser automatically persist across pod stop/start when a volume is attached.
 Without a volume, `/workspace` is a regular container directory (ephemeral).
@@ -52,10 +53,19 @@ That restores ephemeral container-local caches. The image's prewarmed `uvx marim
 
 > **Shared volumes:** `HF_HOME` stores the Hugging Face auth token (`~/.cache/huggingface/token`), so a volume shared between pods will also share whoever is currently logged in with `huggingface-cli login`. If that's not what you want, keep `HF_HOME` off the shared volume (`HF_HOME=/home/runpod/.cache/huggingface`) while leaving `UV_CACHE_DIR` wherever you want it.
 
-Access to the marimo server is gated by Runpod's proxy.
-By default the image launches marimo with `--no-token` (no additional password required).
-Set `MARIMO_TOKEN_PASSWORD` to require a password before the marimo UI is accessible.
-Note that the password is passed as a command-line argument and is visible in `ps` output and `/proc/<pid>/cmdline` on the pod; it is not forwarded to SSH or notebook shells.
+## Authentication
+
+Runpod's web proxy does **not** authenticate requests — anyone with the pod's proxy URL (`https://<pod-id>-2971.proxy.runpod.net`) can reach the marimo server, and a notebook server is arbitrary code execution.
+The image therefore enables marimo's token authentication by default, resolving the password in order:
+
+1. `MARIMO_TOKEN_PASSWORD`, if set — an explicit password of your choosing.
+2. `JUPYTER_PASSWORD`, if set — Runpod auto-generates this for templates that declare it and shows it in the pod's Connect menu.
+3. A random token generated at startup.
+
+Whatever the source, marimo prints a ready-to-use `?access_token=...` URL to the pod logs at startup, and the resolved token is stored at `/home/runpod/.config/marimo/token`.
+The token is passed to marimo via `--token-password-file`, so it does not appear in `ps` output or `/proc/<pid>/cmdline`, and it is not forwarded into SSH or notebook shell environments.
+
+Set `MARIMO_DISABLE_AUTH=true` to opt out and run with `--no-token`. Only do this if something else restricts access to port 2971.
 
 > **Environment variable forwarding:** all environment variables set on the pod — including API keys and other credentials — are forwarded into the marimo and SSH login shell environments so that notebook code can reach them.
 > Be aware that any secret set on the pod is accessible from notebook code.

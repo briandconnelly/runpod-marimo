@@ -65,6 +65,34 @@ jobs:
 
           echo "ref=$(git rev-parse HEAD)" >>"$GITHUB_OUTPUT"
 
+  # Nearly all executable code in this repo is shell (start script, checksum
+  # sync, smoke tests), so lint it with the same rigor the image build gets.
+  # Lints the tree as the checksums job left it, same as build/smoke-test.
+  lint:
+    runs-on: ubuntu-latest
+    needs: checksums
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ needs.checksums.outputs.ref }}
+
+      - name: shellcheck
+        # -x follows the `source common.sh` in the test entry points;
+        # -P SCRIPTDIR resolves it relative to the sourcing script.
+        run: shellcheck -x -P SCRIPTDIR start_marimo.sh scripts/*.sh tests/*.sh
+
+      - name: hadolint
+        uses: hadolint/hadolint-action@v3.3.0
+        with:
+          dockerfile: Dockerfile
+
   build:
     runs-on: ubuntu-latest
     needs: checksums
@@ -143,10 +171,24 @@ jobs:
           cache-from: type=gha,scope=cpu
 
       - name: Run CPU smoke tests
+        # One suite run per auth mode: the smoke tests assert different
+        # things depending on MARIMO_TOKEN_PASSWORD / JUPYTER_PASSWORD /
+        # MARIMO_DISABLE_AUTH, so each branch of the startup script's
+        # token resolution gets exercised against a real container.
         run: |
-          docker run -d --name marimo-ci \
-            -v "$(pwd)/tests:/tests:ro" \
-            -e MARIMO_CACHE_DIR=/home/runpod/.cache \
-            runpod-marimo:smoke-test
-          docker exec marimo-ci bash /tests/test-cpu.sh
-          docker rm -f marimo-ci
+          run_suite() {
+            local name="$1"; shift
+            echo "::group::smoke: $name"
+            docker run -d --name marimo-ci "$@" \
+              -v "$(pwd)/tests:/tests:ro" \
+              -e MARIMO_CACHE_DIR=/home/runpod/.cache \
+              runpod-marimo:smoke-test
+            docker exec marimo-ci bash /tests/test-cpu.sh
+            docker rm -f marimo-ci
+            echo "::endgroup::"
+          }
+          run_suite "default (generated token)"
+          run_suite "explicit password wins over JUPYTER_PASSWORD" \
+            -e 'MARIMO_TOKEN_PASSWORD=sp3c!al ch@rs&?' -e JUPYTER_PASSWORD=from-jupyter
+          run_suite "JUPYTER_PASSWORD fallback" -e JUPYTER_PASSWORD=from-jupyter
+          run_suite "auth disabled" -e MARIMO_DISABLE_AUTH=true

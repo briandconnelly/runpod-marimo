@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- Marimo's token authentication is now **enabled by default**. The previous default (`--no-token`) rested on the assumption that Runpod's web proxy authenticates requests; it does not — anyone with the pod's proxy URL (`https://<pod-id>-2971.proxy.runpod.net`) could reach the marimo editor, which is arbitrary code execution. The password is resolved in order: `MARIMO_TOKEN_PASSWORD` if set, else `JUPYTER_PASSWORD` (Runpod auto-generates it for templates that declare it and shows it in the pod's Connect menu), else a random token generated at startup. Marimo prints a ready-to-use `?access_token=...` URL to the pod logs, and the resolved token is stored at `/home/runpod/.config/marimo/token`. Pods that relied on the old unauthenticated default can restore it with `MARIMO_DISABLE_AUTH=true`.
+- The token is now handed to marimo via `--token-password-file` instead of a `--token-password` command-line flag, so it no longer appears in `ps` output or `/proc/<pid>/cmdline`.
+
+### Added
+
+- `MARIMO_DISABLE_AUTH` environment variable: set to `true` to launch marimo with `--no-token` (the pre-0.8 default). Startup logs a warning when it is used.
+- Lint gate in CI: `shellcheck` over every shell script and `hadolint` over the Dockerfile now run on each pull request.
+- CI smoke tests now run once per authentication mode (generated token, explicit `MARIMO_TOKEN_PASSWORD` precedence, `JUPYTER_PASSWORD` fallback, and `MARIMO_DISABLE_AUTH=true`), and the suite verifies the auth boundary end-to-end: the API must reject unauthenticated requests and accept the resolved token.
+- Pre-release checklist in `AGENTS.md` requiring the GPU variant — which CI cannot smoke-test but which bare version tags resolve to — to pass `tests/run-remote.sh <pod> gpu` against a live pod, and the marimo UI to be verified through the real Runpod proxy, before a release tag is cut.
+
+### Changed
+
+- Container `HEALTHCHECK` now probes marimo's auth-exempt `/health` endpoint instead of `/`, and its `--start-period` is raised from 120s to 600s to match the observed first-boot warmup on an empty persistent cache (>6 minutes on a shared host under load, per the retry deadline the smoke tests already used).
+
+### Fixed
+
+- Pods whose `PUBLIC_KEY` contains multiple newline-separated keys no longer silently drop keys. The idempotency check treated the whole variable as one grep pattern set, so if *any* one key was already in `authorized_keys`, none of the remaining new keys were appended; keys are now deduplicated and appended individually.
+
 ## [0.7.0] - 2026-07-28
 
 ### Added

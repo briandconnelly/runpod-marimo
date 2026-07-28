@@ -21,6 +21,16 @@ Releases are ad hoc: cut a version tag when a meaningful set of changes has accu
 There is no fixed cadence.
 CI builds and publishes the image to GHCR automatically on `v*.*.*` tags.
 
+### Pre-release checklist
+
+CI only smoke-tests the CPU variant (GitHub has no GPU runners), yet bare version tags resolve to the GPU variant — so the GPU image must be validated manually against a live pod before every release:
+
+1. Push the release-candidate image to a registry and launch a Runpod GPU pod from it.
+2. Confirm in the Runpod console that the pod's port 2971 reaches **Ready** and the marimo UI is reachable through the web proxy with the resolved access token. (Token auth once broke the proxy's readiness probe — see the 0.5.2 changelog entry — so this must be re-verified through the real proxy, not just with local curl.)
+3. Run `tests/run-remote.sh <ssh-target> gpu` and require a clean pass.
+
+The "trust CI" rule below applies to pull-request work, not to cutting a release tag.
+
 ## Validation
 
 Trust CI — no local Docker build or smoke test is required before declaring work done.

@@ -44,6 +44,7 @@ check "nvidia-smi runs"             "nvidia-smi -L"
 check "nvidia-smi lists a GPU"      "nvidia-smi -L | grep -q '^GPU '"
 check "runpod user can nvidia-smi"  "su -l runpod -c 'nvidia-smi -L' | grep -q '^GPU '"
 
+# shellcheck disable=SC2012  # mtime sort is the point; the glob is a fixed /tmp pattern
 SBX_VENV=$(ls -dt /tmp/marimo-sandbox-*/venv 2>/dev/null | head -1 || true)
 if [[ -n "$SBX_VENV" ]]; then
     PY="$SBX_VENV/bin/python"
