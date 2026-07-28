@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-07-28
+
 ### Added
 
 - CI now repairs the pinned `_SHA256` ARGs that dependency bumps leave stale. Renovate updates a tool's `_VERSION` ARG but has no way to recompute the checksum beside it — its regex manager only extracts dependency metadata, and `postUpgradeTasks` is self-hosted only — so every gh, DuckDB, and runpodctl bump used to arrive red and sit until someone recomputed the hash by hand. The `checksums` job recomputes it from the PR's version and commits the fix to the branch. Checksum pinning keeps its value because the hash is still computed once and committed, so later rebuilds remain locked to the bytes reviewed on the PR. The job deliberately refuses to auto-update a pin whose version did not change since the base branch: that means the bytes behind an already-released tag moved, which is a supply-chain event to investigate rather than a missed bump.
@@ -24,13 +26,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Updated the GPU variant's CUDA base image to 12.9.2.
 
 ## [0.6.0] - 2026-05-06
-
-### Added
-
-- `MARIMO_TOKEN_PASSWORD` environment variable re-introduced.
-  Set it to require a password before the marimo UI is accessible.
-  This feature was removed in 0.5.1 because marimo's login redirect used the raw `Host` header, which Runpod's proxy sets to an internal overlay address, making the redirect URL unreachable in browsers.
-  Both upstream issues are now fixed in marimo 0.23.5 ([#9249](https://github.com/marimo-team/marimo/issues/9249), [#9250](https://github.com/marimo-team/marimo/issues/9250)).
 
 ### Added
 
