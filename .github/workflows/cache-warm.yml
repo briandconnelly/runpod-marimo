@@ -1,0 +1,56 @@
+name: Warm image build cache
+
+# GitHub's cache isolation only lets a workflow run restore caches created
+# on its own ref or on the default branch. CI runs on pull_request events,
+# whose caches live on the PR merge ref — invisible to the tag-triggered
+# release workflow. Without this job, every release build (validate AND
+# build-and-push) starts cold despite their cache-from lines. Building here
+# on pushes to main puts the layer cache where tag runs can actually see it.
+on:
+  push:
+    branches: [main]
+    # Only files that affect the image: the Dockerfile, everything it
+    # COPYs, and the build context definition.
+    paths:
+      - Dockerfile
+      - .dockerignore
+      - start_marimo.sh
+      - marimo.toml
+      - .github/workflows/cache-warm.yml
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+    permissions:
+      contents: read
+      actions: write
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - variant: gpu
+            description: "Marimo notebook server for Runpod GPU pods"
+          - variant: cpu
+            description: "Marimo notebook server for Runpod CPU pods"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Build Docker image (${{ matrix.variant }})
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: false
+          platforms: linux/amd64
+          build-args: |
+            VARIANT=${{ matrix.variant }}
+            IMAGE_DESCRIPTION=${{ matrix.description }}
+          cache-from: type=gha,scope=${{ matrix.variant }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.variant }}
