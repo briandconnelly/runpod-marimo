@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- CI now repairs the pinned `_SHA256` ARGs that dependency bumps leave stale. Renovate updates a tool's `_VERSION` ARG but has no way to recompute the checksum beside it — its regex manager only extracts dependency metadata, and `postUpgradeTasks` is self-hosted only — so every gh, DuckDB, and runpodctl bump used to arrive red and sit until someone recomputed the hash by hand. The `checksums` job recomputes it from the PR's version and commits the fix to the branch. Checksum pinning keeps its value because the hash is still computed once and committed, so later rebuilds remain locked to the bytes reviewed on the PR. The job deliberately refuses to auto-update a pin whose version did not change since the base branch: that means the bytes behind an already-released tag moved, which is a supply-chain event to investigate rather than a missed bump.
+
 ### Changed
 
 - Updated marimo to 0.23.15.
