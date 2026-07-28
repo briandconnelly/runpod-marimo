@@ -26,6 +26,11 @@ CI builds and publishes the image to GHCR automatically on `v*.*.*` tags.
 Trust CI — no local Docker build or smoke test is required before declaring work done.
 GitHub Actions is the gate.
 
+Do not hand-edit the `_SHA256` ARGs in the Dockerfile when bumping a tool's version.
+Change the `_VERSION` ARG only; CI's `checksums` job recomputes the hash and commits it to the branch.
+Run `scripts/sync-checksums.sh` locally if you want the same fix before pushing.
+If that job fails rather than fixing the pin, do not paste in the hash it printed — it refuses to auto-update a checksum whose version did not change, which means upstream altered an already-released tag.
+
 ## Git workflow
 
 Always work on a feature branch.
