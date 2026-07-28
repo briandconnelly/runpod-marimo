@@ -36,6 +36,9 @@ jobs:
           build-args: |
             VARIANT=cpu
             IMAGE_DESCRIPTION=Marimo notebook server for Runpod CPU pods
+          # Restores the default-branch cache written by cache-warm.yml —
+          # tag runs cannot see PR-scoped caches, only main's.
+          cache-from: type=gha,scope=cpu
 
       - name: Run CPU smoke tests
         run: |
