@@ -23,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Updated uv to 0.12.0.
 - Release builds now start from a warm layer cache. A new `cache-warm` workflow builds both variants on pushes to `main` that touch image-relevant files, because GitHub's cache isolation hides PR-scoped caches from tag-triggered runs — the release workflow's existing `cache-from` lines had never actually hit, and the `validate` job (which had none) now restores the same cache.
 - Container `HEALTHCHECK` now probes marimo's auth-exempt `/health` endpoint instead of `/`, and its `--start-period` is raised from 120s to 600s to match the observed first-boot warmup on an empty persistent cache (>6 minutes on a shared host under load, per the retry deadline the smoke tests already used).
 
