@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-07-28
+
 ### Security
 
 - Marimo's token authentication is now **enabled by default**. The previous default (`--no-token`) rested on the assumption that Runpod's web proxy authenticates requests; it does not — anyone with the pod's proxy URL (`https://<pod-id>-2971.proxy.runpod.net`) could reach the marimo editor, which is arbitrary code execution. The password is resolved in order: `MARIMO_TOKEN_PASSWORD` if set, else `JUPYTER_PASSWORD` (Runpod auto-generates it for templates that declare it; its value is not shown in the console, but it stays stable across pod stop/start), else a random token generated at startup. The startup logs print a ready-to-use proxy access URL (`https://<pod-id>-2971.proxy.runpod.net/?access_token=...`), and the resolved token is stored at `/home/runpod/.config/marimo/token`. Pods that relied on the old unauthenticated default can restore it with `MARIMO_DISABLE_AUTH=true`.
