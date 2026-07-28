@@ -49,6 +49,35 @@ shared_tests() {
     check "ty installed as tool"              "su -l runpod -c 'uv tool list' 2>/dev/null | grep -qw ty"
     check "marimo NOT installed as tool"      "! su -l runpod -c 'uv tool list' 2>/dev/null | grep -qw marimo"
 
+    section "HTTP endpoint"
+    # This section runs BEFORE the process checks: its retry loop is the
+    # startup barrier. In CI, docker exec launches this suite well under a
+    # second after `docker run -d`, so a bare pgrep below would race
+    # marimo's launch; once /health answers, the process must exist.
+    # /health is served 200 without authentication, so this probe works
+    # identically whether token auth is on (default) or disabled.
+    # First boot against an empty persistent cache (network volume + new
+    # UV_CACHE_DIR=/workspace/.cache/uv in 0.5.3) re-downloads marimo's
+    # sandbox deps before binding :2971, so a single-shot probe races
+    # warmup. Observed >6 min on a shared host under load; retry until a
+    # ~10-min wall-clock deadline. Per-attempt --connect-timeout /
+    # --max-time caps each curl so a stalled TCP-accepted-but-HTTP-hung
+    # server can't push total past the deadline. Wrapped in a subshell
+    # so `exit` stays local — `check` uses `eval` in the current shell.
+    check "health endpoint 2xx on :2971" \
+        "(deadline=\$((\$(date +%s) + 600)); while [[ \$(date +%s) -lt \$deadline ]]; do curl -sfo /dev/null --connect-timeout 3 --max-time 5 http://localhost:2971/health && exit 0; sleep 5; done; exit 1)"
+    if [[ "${MARIMO_DISABLE_AUTH:-}" != "true" ]]; then
+        # Verify the auth boundary end-to-end: the API must reject
+        # unauthenticated requests and accept the resolved token.
+        # --data-urlencode with -G reads the token from the file and
+        # URL-encodes it, so user-chosen passwords with special
+        # characters survive the round trip.
+        check "API rejects unauthenticated requests" \
+            "[[ \$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 http://localhost:2971/api/status) == 401 ]]"
+        check "API accepts the resolved token" \
+            "[[ \$(curl -sG -o /dev/null -w '%{http_code}' --max-time 5 --data-urlencode access_token@/home/runpod/.config/marimo/token http://localhost:2971/api/status) == 200 ]]"
+    fi
+
     section "Marimo process"
     local MARIMO_PID MARIMO_USER MARIMO_CMD MARIMO_WS
     MARIMO_PID=$(pgrep -f 'bin/marimo edit' | head -1 || true)
@@ -145,31 +174,6 @@ shared_tests() {
             check "HF_HOME defaults to <cache_root>/huggingface" \
                 "[[ '$MARIMO_ENV_HF' == '$EXPECTED_CACHE_ROOT/huggingface' ]]"
         fi
-    fi
-
-    section "HTTP endpoint"
-    # /health is served 200 without authentication, so this probe works
-    # identically whether token auth is on (default) or disabled.
-    # First boot against an empty persistent cache (network volume + new
-    # UV_CACHE_DIR=/workspace/.cache/uv in 0.5.3) re-downloads marimo's
-    # sandbox deps before binding :2971, so a single-shot probe races
-    # warmup. Observed >6 min on a shared host under load; retry until a
-    # ~10-min wall-clock deadline. Per-attempt --connect-timeout /
-    # --max-time caps each curl so a stalled TCP-accepted-but-HTTP-hung
-    # server can't push total past the deadline. Wrapped in a subshell
-    # so `exit` stays local — `check` uses `eval` in the current shell.
-    check "health endpoint 2xx on :2971" \
-        "(deadline=\$((\$(date +%s) + 600)); while [[ \$(date +%s) -lt \$deadline ]]; do curl -sfo /dev/null --connect-timeout 3 --max-time 5 http://localhost:2971/health && exit 0; sleep 5; done; exit 1)"
-    if [[ "${MARIMO_DISABLE_AUTH:-}" != "true" ]]; then
-        # Verify the auth boundary end-to-end: the API must reject
-        # unauthenticated requests and accept the resolved token.
-        # --data-urlencode with -G reads the token from the file and
-        # URL-encodes it, so user-chosen passwords with special
-        # characters survive the round trip.
-        check "API rejects unauthenticated requests" \
-            "[[ \$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 http://localhost:2971/api/status) == 401 ]]"
-        check "API accepts the resolved token" \
-            "[[ \$(curl -sG -o /dev/null -w '%{http_code}' --max-time 5 --data-urlencode access_token@/home/runpod/.config/marimo/token http://localhost:2971/api/status) == 200 ]]"
     fi
 
     section "Marimo config"
