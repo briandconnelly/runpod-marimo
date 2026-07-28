@@ -9,9 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- Updated runpodctl to v2.3.0.
-- Updated DuckDB to v1.5.3.
-- Updated huggingface_hub to 1.17.0.
+- Updated marimo to 0.23.15.
+- Updated Python to 3.13.14.
+- Updated uv to 0.11.33.
+- Updated huggingface_hub to 1.25.1.
+- Updated ty to 0.0.64.
+- Updated GitHub CLI to v2.96.0.
+- Updated runpodctl to v2.7.2.
+- Updated DuckDB to v1.5.5.
+- Updated the GPU variant's CUDA base image to 12.9.2.
 
 ## [0.6.0] - 2026-05-06
 
