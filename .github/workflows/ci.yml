@@ -53,7 +53,12 @@ jobs:
           else
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git commit -m "chore: sync pinned download checksums" -- Dockerfile
+            # [skip ci] is required, not cosmetic. A push made with
+            # GITHUB_TOKEN spawns a pull_request run that GitHub parks at
+            # action_required forever, which would leave the PR unmergeable.
+            # The run doing the pushing already builds the fixed tree below,
+            # so the suppressed run would only duplicate it.
+            git commit -m "chore: sync pinned download checksums [skip ci]" -- Dockerfile
             git push
             echo "::notice::Refreshed stale download checksums and pushed the fix."
           fi
