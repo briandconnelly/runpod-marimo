@@ -50,7 +50,9 @@ ENV PYTHONUNBUFFERED=1
 # ca-certificates + curl are required for the tool downloads below.
 # openssh-server provides sshd and the /etc/init.d/ssh script used by
 # start_marimo.sh when PUBLIC_KEY is set.
-# jq is retained as a general-purpose interactive tool in the container.
+# jq is load-bearing: start_marimo.sh uses it to URL-encode the access
+# token for the proxy URL printed to the pod logs (and it remains a
+# general-purpose interactive tool).
 RUN apt-get update --yes && \
     DEBIAN_FRONTEND=noninteractive apt-get install --yes --no-install-recommends \
         ca-certificates \

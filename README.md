@@ -59,10 +59,10 @@ Runpod's web proxy does **not** authenticate requests — anyone with the pod's 
 The image therefore enables marimo's token authentication by default, resolving the password in order:
 
 1. `MARIMO_TOKEN_PASSWORD`, if set — an explicit password of your choosing.
-2. `JUPYTER_PASSWORD`, if set — Runpod auto-generates this for templates that declare it and shows it in the pod's Connect menu.
-3. A random token generated at startup.
+2. `JUPYTER_PASSWORD`, if set — Runpod auto-generates this env var for templates that declare it. The console does not display its value anywhere, but unlike a generated token it stays stable across pod stop/start, so a bookmarked access URL keeps working.
+3. A random token generated at startup (rotates on every restart).
 
-Whatever the source, marimo prints a ready-to-use `?access_token=...` URL to the pod logs at startup, and the resolved token is stored at `/home/runpod/.config/marimo/token`.
+Whatever the source, the startup logs print a ready-to-use access URL (`https://<pod-id>-2971.proxy.runpod.net/?access_token=...`) — open the pod's logs in the Runpod console to find it. The resolved token is also stored at `/home/runpod/.config/marimo/token`.
 The token is passed to marimo via `--token-password-file`, so it does not appear in `ps` output or `/proc/<pid>/cmdline`, and it is not forwarded into SSH or notebook shell environments.
 
 Set `MARIMO_DISABLE_AUTH=true` to opt out and run with `--no-token`. Only do this if something else restricts access to port 2971.

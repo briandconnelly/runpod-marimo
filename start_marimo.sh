@@ -239,10 +239,13 @@ fi
 #   1. MARIMO_DISABLE_AUTH=true  → --no-token (explicit opt-out).
 #   2. MARIMO_TOKEN_PASSWORD     → user-chosen password.
 #   3. JUPYTER_PASSWORD          → Runpod auto-generates this for templates
-#                                  that declare it and shows it in the pod's
-#                                  Connect UI, so it is discoverable there.
-#   4. A random token, printed to the pod logs (marimo also prints a
-#      ready-to-use ?access_token= URL at startup).
+#                                  that declare it. The console does NOT
+#                                  display its value anywhere, but unlike a
+#                                  generated token it stays stable across
+#                                  pod stop/start.
+#   4. A random token (rotates every boot).
+# Whatever the source, the one place a user can always find the token is
+# the pod logs: a ready-to-use proxy access URL is printed below.
 # The token is handed to marimo via --token-password-file rather than a
 # command-line flag so it never appears in `ps` / /proc/<pid>/cmdline. The
 # file is runpod-owned mode 0600: marimo (running as runpod) must read it,
@@ -256,7 +259,7 @@ else
         echo "Token authentication enabled (MARIMO_TOKEN_PASSWORD)."
         TOKEN_VALUE="$MARIMO_TOKEN_PASSWORD"
     elif [[ -n "${JUPYTER_PASSWORD:-}" ]]; then
-        echo "Token authentication enabled; using JUPYTER_PASSWORD (shown in the pod's Connect UI)."
+        echo "Token authentication enabled; using JUPYTER_PASSWORD as the access token."
         TOKEN_VALUE="$JUPYTER_PASSWORD"
     else
         echo "Token authentication enabled with a generated token; see the access URL below or ${TOKEN_FILE}."
@@ -270,6 +273,18 @@ else
     }
     printf '%s' "$TOKEN_VALUE" > "$TOKEN_FILE"
     AUTH_FLAG=$(printf -- '--token-password-file %q' "$TOKEN_FILE")
+
+    # Print a clickable, token-pre-filled proxy URL. This is the token's
+    # discoverability story: the Runpod console shows neither JUPYTER_PASSWORD
+    # nor anything we generate, so the pod logs are the one place a user can
+    # always look. jq URL-encodes the token so user-chosen passwords with
+    # special characters produce a working link. Logs are only visible to
+    # the console-authenticated pod owner, and marimo itself already prints
+    # a localhost URL with the same token.
+    if [[ -n "${RUNPOD_POD_ID:-}" ]]; then
+        TOKEN_URI=$(jq -rn --arg v "$TOKEN_VALUE" '$v|@uri')
+        echo "Access marimo at: https://${RUNPOD_POD_ID}-2971.proxy.runpod.net/?access_token=${TOKEN_URI}"
+    fi
 fi
 
 # Launch marimo editor as the runpod user.
