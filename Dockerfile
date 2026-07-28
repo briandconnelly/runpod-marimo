@@ -3,11 +3,11 @@
 # CPU variant: plain Ubuntu 24.04
 # VARIANT is passed at build time; the matching base stage is selected below.
 # renovate: datasource=docker depName=nvidia/cuda
-ARG CUDA_BASE_TAG=12.5.1-runtime-ubuntu24.04
+ARG CUDA_BASE_TAG=12.9.2-runtime-ubuntu24.04
 # renovate: datasource=docker depName=ubuntu
 ARG UBUNTU_BASE_TAG=24.04
 # renovate: datasource=docker depName=ghcr.io/astral-sh/uv
-ARG UV_VERSION=0.11.17
+ARG UV_VERSION=0.11.33
 ARG VARIANT=gpu
 
 # Named stage for the uv binary distribution. A named stage is used rather
@@ -28,9 +28,9 @@ ARG IMAGE_DESCRIPTION="Marimo notebook server for Runpod GPU pods"
 # renovate: datasource=python-version depName=python
 ARG PYTHON_VERSION=3.13.14
 # renovate: datasource=pypi depName=marimo
-ARG MARIMO_VERSION=0.23.8
+ARG MARIMO_VERSION=0.23.15
 # renovate: datasource=pypi depName=huggingface_hub
-ARG HUGGINGFACE_HUB_VERSION=1.17.0
+ARG HUGGINGFACE_HUB_VERSION=1.25.1
 # renovate: datasource=pypi depName=ty
 ARG TY_VERSION=0.0.41
 
