@@ -20,10 +20,17 @@ if [[ -n "${PUBLIC_KEY:-}" ]]; then
     echo "Setting up SSH..."
     mkdir -p /root/.ssh
     # Idempotent: avoid duplicate entries across pod stop/start cycles.
+    # PUBLIC_KEY can hold several newline-separated keys (Runpod sends every
+    # key on the account), so dedup per key. A single grep against the whole
+    # variable would treat each line as an independent -F pattern and skip
+    # the append when ANY one key already matched, silently dropping the rest.
     touch /root/.ssh/authorized_keys
-    if ! grep -Fxq -- "$PUBLIC_KEY" /root/.ssh/authorized_keys; then
-        printf '%s\n' "$PUBLIC_KEY" >> /root/.ssh/authorized_keys
-    fi
+    while IFS= read -r pubkey; do
+        [[ -z "$pubkey" ]] && continue
+        if ! grep -Fxq -- "$pubkey" /root/.ssh/authorized_keys; then
+            printf '%s\n' "$pubkey" >> /root/.ssh/authorized_keys
+        fi
+    done <<< "$PUBLIC_KEY"
     chmod 700 /root/.ssh
     chmod 600 /root/.ssh/authorized_keys
 
@@ -98,6 +105,7 @@ _validate_path_var() {
             ;;
     esac
     printf -v "$name" '%s' "$canonical"
+    # shellcheck disable=SC2163  # $name intentionally holds the variable's name
     export "$name"
 }
 [[ -n "${MARIMO_WORKSPACE:-}" ]] && _validate_path_var MARIMO_WORKSPACE "$MARIMO_WORKSPACE"
@@ -193,10 +201,10 @@ _forward_env() {
             HOME|USER|LOGNAME|SHELL|TERM|PATH|SHLVL|PWD|OLDPWD|_|HOSTNAME) continue ;;
             # Bash readonly variables that would error on re-export
             BASHOPTS|SHELLOPTS) continue ;;
-            # Consumed at boot by SSH setup / unused Jupyter hook / marimo
-            # token auth; all are credentials or startup-only and have no use
-            # in the notebook env.
-            PUBLIC_KEY|JUPYTER_PASSWORD|MARIMO_TOKEN_PASSWORD) continue ;;
+            # Consumed at boot by SSH setup / marimo token-auth resolution;
+            # all are credentials or startup-only and have no use in the
+            # notebook env.
+            PUBLIC_KEY|JUPYTER_PASSWORD|MARIMO_TOKEN_PASSWORD|MARIMO_DISABLE_AUTH) continue ;;
         esac
         # Skip entries that aren't valid shell identifiers (e.g. BASH_FUNC_*%%)
         [[ "$key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || continue
@@ -223,30 +231,74 @@ if [[ -f /post_start.sh ]]; then
     fi
 fi
 
+# ── Authentication ───────────────────────────────────────────────────────────
+# Runpod's web proxy does NOT authenticate requests: anyone with the pod's
+# proxy URL (https://<pod-id>-2971.proxy.runpod.net) reaches this server, and
+# a marimo editor is arbitrary code execution. Token auth is therefore ON by
+# default; the password is resolved in order:
+#   1. MARIMO_DISABLE_AUTH=true  → --no-token (explicit opt-out).
+#   2. MARIMO_TOKEN_PASSWORD     → user-chosen password.
+#   3. JUPYTER_PASSWORD          → Runpod auto-generates this for templates
+#                                  that declare it. The console does NOT
+#                                  display its value anywhere, but unlike a
+#                                  generated token it stays stable across
+#                                  pod stop/start.
+#   4. A random token (rotates every boot).
+# Whatever the source, the one place a user can always find the token is
+# the pod logs: a ready-to-use proxy access URL is printed below.
+# The token is handed to marimo via --token-password-file rather than a
+# command-line flag so it never appears in `ps` / /proc/<pid>/cmdline. The
+# file is runpod-owned mode 0600: marimo (running as runpod) must read it,
+# and anything already running as runpod is post-auth anyway.
+TOKEN_FILE=/home/runpod/.config/marimo/token
+if [[ "${MARIMO_DISABLE_AUTH:-}" == "true" ]]; then
+    echo "Warning: MARIMO_DISABLE_AUTH=true — the marimo UI is reachable without a password by anyone with this pod's proxy URL." >&2
+    AUTH_FLAG="--no-token"
+else
+    if [[ -n "${MARIMO_TOKEN_PASSWORD:-}" ]]; then
+        echo "Token authentication enabled (MARIMO_TOKEN_PASSWORD)."
+        TOKEN_VALUE="$MARIMO_TOKEN_PASSWORD"
+    elif [[ -n "${JUPYTER_PASSWORD:-}" ]]; then
+        echo "Token authentication enabled; using JUPYTER_PASSWORD as the access token."
+        TOKEN_VALUE="$JUPYTER_PASSWORD"
+    else
+        echo "Token authentication enabled with a generated token; see the access URL below or ${TOKEN_FILE}."
+        # head reads a fixed byte count before base64 runs, so no SIGPIPE
+        # under pipefail. 24 random bytes → 32 base64 chars before stripping.
+        TOKEN_VALUE=$(head -c 24 /dev/urandom | base64 | tr -d '/+=\n')
+    fi
+    install -o runpod -g runpod -m 0600 /dev/null "$TOKEN_FILE" || {
+        echo "Error: failed to create token file '$TOKEN_FILE'." >&2
+        exit 1
+    }
+    printf '%s' "$TOKEN_VALUE" > "$TOKEN_FILE"
+    AUTH_FLAG=$(printf -- '--token-password-file %q' "$TOKEN_FILE")
+
+    # Print a clickable, token-pre-filled proxy URL. This is the token's
+    # discoverability story: the Runpod console shows neither JUPYTER_PASSWORD
+    # nor anything we generate, so the pod logs are the one place a user can
+    # always look. jq URL-encodes the token so user-chosen passwords with
+    # special characters produce a working link. Logs are only visible to
+    # the console-authenticated pod owner, and marimo itself already prints
+    # a localhost URL with the same token.
+    if [[ -n "${RUNPOD_POD_ID:-}" ]]; then
+        TOKEN_URI=$(jq -rn --arg v "$TOKEN_VALUE" '$v|@uri')
+        echo "Access marimo at: https://${RUNPOD_POD_ID}-2971.proxy.runpod.net/?access_token=${TOKEN_URI}"
+    fi
+fi
+
 # Launch marimo editor as the runpod user.
 # --host 0.0.0.0       : bind to all interfaces so Runpod's proxy can reach it
 # --port 2971          : marimo's default port (exposed in the Runpod template config)
-# --no-token           : disable marimo's built-in token auth (default); authentication
-#                        is handled by Runpod's proxy — do not expose port 2971 directly
-# --token-password VAL : require a password before granting access; opted into by
-#                        setting MARIMO_TOKEN_PASSWORD. Mutually exclusive with --no-token.
-#                        Note: the password appears in the process command line and is
-#                        visible via `ps` and /proc/<pid>/cmdline on the pod.
 # --sandbox            : run each notebook in an isolated uv environment derived from
 #                        its PEP 723 inline script metadata, ensuring reproducibility
 #
 # MARIMO_ARGS is interpolated into `su -l runpod -c "uvx ... $MARIMO_ARGS"` below,
 # so the string is re-parsed as a shell command by the su-invoked shell. Every
-# value substituted in from the environment (workspace path, token password) is
+# value substituted in from the environment (workspace path, token file path) is
 # pre-escaped with `printf %q` so special characters survive that second parse
 # unchanged and cannot inject commands — this script runs as root, so unescaped
 # interpolation of user-controlled env vars would be a privilege-escalation hole.
-if [[ -n "${MARIMO_TOKEN_PASSWORD:-}" ]]; then
-    echo "Token authentication enabled."
-    AUTH_FLAG=$(printf -- '--token-password %q' "$MARIMO_TOKEN_PASSWORD")
-else
-    AUTH_FLAG="--no-token"
-fi
 WORKSPACE_Q=$(printf '%q' "$WORKSPACE")
 MARIMO_ARGS="edit --host 0.0.0.0 --port 2971 ${AUTH_FLAG} --sandbox ${WORKSPACE_Q}"
 

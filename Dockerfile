@@ -17,7 +17,12 @@ FROM ghcr.io/astral-sh/uv:${UV_VERSION} AS uv-dist
 
 FROM nvidia/cuda:${CUDA_BASE_TAG} AS base-gpu
 FROM ubuntu:${UBUNTU_BASE_TAG} AS base-cpu
+# hadolint ignore=DL3006  # base-${VARIANT} is a named stage above, not an untagged image
 FROM base-${VARIANT}
+
+# Fail RUN pipelines on the first broken stage instead of only the last;
+# also satisfies hadolint DL4006 for the checksum-verified downloads below.
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 # Re-declare ARGs that need to be visible after the final FROM.
 # IMAGE_VERSION is intentionally declared and consumed at the bottom of the
@@ -45,7 +50,9 @@ ENV PYTHONUNBUFFERED=1
 # ca-certificates + curl are required for the tool downloads below.
 # openssh-server provides sshd and the /etc/init.d/ssh script used by
 # start_marimo.sh when PUBLIC_KEY is set.
-# jq is retained as a general-purpose interactive tool in the container.
+# jq is load-bearing: start_marimo.sh uses it to URL-encode the access
+# token for the proxy URL printed to the pod logs (and it remains a
+# general-purpose interactive tool).
 RUN apt-get update --yes && \
     DEBIAN_FRONTEND=noninteractive apt-get install --yes --no-install-recommends \
         ca-certificates \
@@ -136,6 +143,7 @@ RUN mkdir -p /home/runpod/.config/marimo && \
 ENV UV=/usr/local/bin/uv \
     UV_PYTHON_INSTALL_DIR=/opt/uv-python \
     MARIMO_VERSION=${MARIMO_VERSION}
+# hadolint ignore=SC2016  # $PATH must stay literal for the profile script
 RUN printf 'export UV=/usr/local/bin/uv\nexport UV_PYTHON_INSTALL_DIR=/opt/uv-python\nexport MARIMO_VERSION=%s\nexport PATH="/home/runpod/.local/bin:$PATH"\n' \
         "${MARIMO_VERSION}" > /etc/profile.d/runpod-env.sh
 
@@ -181,8 +189,14 @@ RUN chmod +x /start_marimo.sh
 
 EXPOSE 2971
 
-HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=3 \
-    CMD curl -f http://localhost:2971/ || exit 1
+# /health is served 200 without authentication (verified on marimo 0.23.15),
+# so the probe works identically with and without token auth — `/` answers
+# with a 303 to the login page when a token is required. start-period is
+# 600s because a first boot against an empty persistent cache (network
+# volume) re-downloads marimo's sandbox deps before binding :2971; >6 min
+# has been observed on a shared host under load (see tests/common.sh).
+HEALTHCHECK --interval=30s --timeout=10s --start-period=600s --retries=3 \
+    CMD curl -f http://localhost:2971/health || exit 1
 
 # Version label is set last so release bumps of IMAGE_VERSION only invalidate
 # the metadata layer, leaving the expensive apt/uv/Python layers cached.
