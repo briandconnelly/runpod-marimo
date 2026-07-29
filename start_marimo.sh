@@ -316,5 +316,24 @@ MARIMO_ARGS="edit --host 0.0.0.0 --port 2971 ${AUTH_FLAG} --sandbox ${WORKSPACE_
 # code use the process cwd, not marimo's --sandbox arg. Without this cd,
 # files uploaded through marimo's UI land in /home/runpod (ephemeral
 # container state) even though the file browser shows /workspace.
+#
+# `--with 'mcp<2'` caps a transitive dependency that marimo itself leaves
+# unbounded. marimo's [mcp] extra declares `mcp>=1.0.0`, but mcp 2.0.0
+# (2026-07-28) removed `streamablehttp_client` and the whole
+# `mcp.server.fastmcp` module, both of which marimo 0.23.15 imports at
+# runtime — so an unconstrained resolve leaves the MCP integration broken
+# with an ImportError at connect time. Upstream:
+# https://github.com/marimo-team/marimo/issues/10371
+#
+# The requirement set here must stay in sync with the prewarm in the
+# Dockerfile: uvx keys its cached tool env on the full set, so dropping or
+# changing the cap on one side silently turns first boot into a fresh
+# download instead of a cache hit. The two spellings differ (the Dockerfile
+# quotes the argument, this uses %q) but must resolve to the same argv.
+#
+# Drop the cap once marimo ships a release that supports mcp 2.x. The
+# constraint is %q-escaped like the spec below because `<` would otherwise
+# be parsed as a redirection by the `su -l` shell.
+MCP_CONSTRAINT_Q=$(printf '%q' 'mcp<2')
 MARIMO_SPEC_Q=$(printf '%q' "marimo[mcp,lsp]==${MARIMO_VERSION}")
-exec su -l runpod -c "cd ${WORKSPACE_Q} && uvx ${MARIMO_SPEC_Q} $MARIMO_ARGS"
+exec su -l runpod -c "cd ${WORKSPACE_Q} && uvx --with ${MCP_CONSTRAINT_Q} ${MARIMO_SPEC_Q} $MARIMO_ARGS"

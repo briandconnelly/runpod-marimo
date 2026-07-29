@@ -145,6 +145,31 @@ shared_tests() {
         check "marimo cwd matches workspace" "[[ '$MARIMO_CWD' == '$MARIMO_WS' ]]"
     fi
 
+    section "MCP integration"
+    # Regression test for the mcp 2.0.0 break (marimo#10371). marimo's [mcp]
+    # extra declares an unbounded `mcp>=1.0.0`, and mcp 2.0.0 removed both
+    # symbols marimo 0.23.15 imports at runtime: `streamablehttp_client` was
+    # renamed and its alias dropped, and `mcp.server.fastmcp` was deleted
+    # outright. start_marimo.sh caps the resolve at `mcp<2`.
+    #
+    # Nothing above catches this: marimo starts fine and serves /health, and
+    # the failure surfaces only as an ImportError in the logs when the MCP
+    # client connects. Assert the imports rather than the pinned version, so
+    # this keeps testing the property that matters once the cap is lifted for
+    # an mcp-2-compatible marimo.
+    if [[ -n "$MARIMO_PID" ]]; then
+        local MARIMO_BIN MARIMO_ENV_PY
+        MARIMO_BIN=$(tr '\0' '\n' < /proc/"$MARIMO_PID"/cmdline | head -1)
+        MARIMO_ENV_PY="$(dirname "$(dirname "$MARIMO_BIN")")/bin/python"
+        check "marimo tool env python exists" "test -x '$MARIMO_ENV_PY'"
+        check "mcp streamable-http client importable" \
+            "'$MARIMO_ENV_PY' -c 'from mcp.client.streamable_http import streamablehttp_client'"
+        check "mcp FastMCP importable" \
+            "'$MARIMO_ENV_PY' -c 'from mcp.server.fastmcp import FastMCP'"
+    else
+        echo "  (skipped — marimo process not found)"
+    fi
+
     section "Cache locations"
     # Caches should live under the workspace by default so they persist
     # on a Runpod network volume. MARIMO_CACHE_DIR overrides to a
