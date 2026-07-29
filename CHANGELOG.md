@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Marimo's MCP integration no longer breaks on new pods. marimo's `[mcp]` extra declares an unbounded `mcp>=1.0.0`, and mcp 2.0.0 (released 2026-07-28) removed both symbols marimo 0.23.15 imports at runtime — `streamablehttp_client`, renamed with its deprecated alias dropped, and the `mcp.server.fastmcp` module, deleted outright. Pods resolving the marimo tool env after that release logged `Failed to connect to MCP server marimo ... cannot import name 'streamablehttp_client'` and came up with MCP unavailable. The launcher now caps the resolve with `uvx --with 'mcp<2'`; the cap can be dropped once marimo supports mcp 2.x ([marimo#10371](https://github.com/marimo-team/marimo/issues/10371)).
+  Pinning `MARIMO_VERSION` did not prevent this: `uvx` re-resolves marimo's dependency closure against PyPI whenever the tool env is not already cached, which is every first boot on a pod whose `UV_CACHE_DIR` lives on a fresh network volume. The image pins marimo, not its transitive dependencies.
+- Smoke tests now assert that both `mcp` symbols marimo imports are importable from the running marimo tool env. Neither the health probe nor the process checks caught this break: marimo starts normally and serves `/health`, and the failure appears only as an ImportError when the MCP client connects.
+
 ## [0.8.0] - 2026-07-28
 
 ### Security

@@ -175,9 +175,12 @@ RUN su -l runpod -c "uv tool install huggingface_hub==${HUGGINGFACE_HUB_VERSION}
 # Populate uvx's per-spec tool-env cache so `uvx marimo[mcp,lsp]==VER` in
 # start_marimo.sh is a cache hit on first boot (saves ~1-2 minutes on a cold
 # pod). The cache key is the exact spec string, so this invocation must
-# match what start_marimo.sh uses. Users who override MARIMO_VERSION at
-# runtime pay the download cost once for their new version.
-RUN su -l runpod -c "uvx 'marimo[mcp,lsp]==${MARIMO_VERSION}' --version"
+# match what start_marimo.sh uses — including the `--with 'mcp<2'` cap,
+# which is part of the requirement set uvx keys the cache on. See the
+# comment above that invocation for why the cap exists and when to drop it.
+# Users who override MARIMO_VERSION at runtime pay the download cost once
+# for their new version.
+RUN su -l runpod -c "uvx --with 'mcp<2' 'marimo[mcp,lsp]==${MARIMO_VERSION}' --version"
 
 # ── Marimo config ────────────────────────────────────────────────────────────
 COPY marimo.toml /home/runpod/.config/marimo/marimo.toml
