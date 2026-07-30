@@ -110,7 +110,7 @@ jobs:
         run: shellcheck -x -P SCRIPTDIR start_marimo.sh scripts/*.sh tests/*.sh
 
       - name: hadolint
-        uses: hadolint/hadolint-action@v3.3.0
+        uses: hadolint/hadolint-action@v3.4.0
         with:
           dockerfile: Dockerfile
 
