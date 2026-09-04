@@ -5,7 +5,7 @@
 # renovate: datasource=docker depName=nvidia/cuda
 ARG CUDA_BASE_TAG=12.9.2-runtime-ubuntu24.04
 # renovate: datasource=docker depName=ubuntu
-ARG UBUNTU_BASE_TAG=24.04
+ARG UBUNTU_BASE_TAG=26.04
 # renovate: datasource=docker depName=ghcr.io/astral-sh/uv
 ARG UV_VERSION=0.12.0
 ARG VARIANT=gpu
