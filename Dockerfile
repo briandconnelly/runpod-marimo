@@ -196,8 +196,15 @@ EXPOSE 2971
 # 600s because a first boot against an empty persistent cache (network
 # volume) re-downloads marimo's sandbox deps before binding :2971; >6 min
 # has been observed on a shared host under load (see tests/common.sh).
+#
+# JSON (exec) notation, so hadolint's DL3025 is satisfied without an ignore.
+# The probe still needs a shell for the `||`, so one is named explicitly;
+# that makes it /bin/sh rather than the bash named by the SHELL instruction
+# above, which is immaterial here — no bashism, no pipeline. `|| exit 1`
+# normalises curl's varied failure codes (7 refused, 22 HTTP >= 400, 28
+# timeout) to the 1 that Docker documents as "unhealthy".
 HEALTHCHECK --interval=30s --timeout=10s --start-period=600s --retries=3 \
-    CMD curl -f http://localhost:2971/health || exit 1
+    CMD ["/bin/sh", "-c", "curl -f http://localhost:2971/health || exit 1"]
 
 # Version label is set last so release bumps of IMAGE_VERSION only invalidate
 # the metadata layer, leaving the expensive apt/uv/Python layers cached.
