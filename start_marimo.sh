@@ -205,6 +205,11 @@ _forward_env() {
             # all are credentials or startup-only and have no use in the
             # notebook env.
             PUBLIC_KEY|JUPYTER_PASSWORD|MARIMO_TOKEN_PASSWORD|MARIMO_DISABLE_AUTH) continue ;;
+            # Owned by the Authentication block below, which appends the
+            # resolved token to this file. Forwarding an inbound value here
+            # would leave a stale token exported when auth is disabled, and
+            # would race the authoritative append when it is not.
+            MARIMO_TOKEN) continue ;;
         esac
         # Skip entries that aren't valid shell identifiers (e.g. BASH_FUNC_*%%)
         [[ "$key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || continue
@@ -254,6 +259,12 @@ TOKEN_FILE=/home/runpod/.config/marimo/token
 if [[ "${MARIMO_DISABLE_AUTH:-}" == "true" ]]; then
     echo "Warning: MARIMO_DISABLE_AUTH=true — the marimo UI is reachable without a password by anyone with this pod's proxy URL." >&2
     AUTH_FLAG="--no-token"
+    # Drop any token left by a previous boot. Runpod preserves the container
+    # filesystem across stop/start, so a pod that ran with auth and restarts
+    # with MARIMO_DISABLE_AUTH=true would otherwise keep a stale token file —
+    # which the .bashrc hook would then export as MARIMO_TOKEN. Removing it
+    # keeps the invariant the hook relies on: the file exists iff auth is on.
+    rm -f "$TOKEN_FILE"
 else
     if [[ -n "${MARIMO_TOKEN_PASSWORD:-}" ]]; then
         echo "Token authentication enabled (MARIMO_TOKEN_PASSWORD)."
@@ -273,6 +284,20 @@ else
     }
     printf '%s' "$TOKEN_VALUE" > "$TOKEN_FILE"
     AUTH_FLAG=$(printf -- '--token-password-file %q' "$TOKEN_FILE")
+
+    # Export the resolved token into the login-shell environment so the
+    # bundled marimo-pair skill — and any agent a user brings into the pod —
+    # can authenticate against :2971 with no setup. The skill's scripts read
+    # MARIMO_TOKEN precisely so the token stays out of `ps`.
+    #
+    # This widens the token's reach from the 0600 file to every login shell,
+    # and the READMEs say so. The exposure is small in practice: both
+    # identities that get a shell here (root, and runpod via marimo) can
+    # already read TOKEN_FILE, and the token is printed to the pod logs.
+    # POD_ENV_FILE is 0640 root:runpod and already carries every other pod
+    # credential. Appended rather than written by _forward_env above because
+    # that runs before the token exists.
+    printf 'export MARIMO_TOKEN=%q\n' "$TOKEN_VALUE" >> "$POD_ENV_FILE"
 
     # Print a clickable, token-pre-filled proxy URL. This is the token's
     # discoverability story: the Runpod console shows neither JUPYTER_PASSWORD

@@ -218,4 +218,11 @@ jobs:
           run_suite "explicit password wins over JUPYTER_PASSWORD" \
             -e 'MARIMO_TOKEN_PASSWORD=sp3c!al ch@rs&?' -e JUPYTER_PASSWORD=from-jupyter
           run_suite "JUPYTER_PASSWORD fallback" -e JUPYTER_PASSWORD=from-jupyter
-          run_suite "auth disabled" -e MARIMO_DISABLE_AUTH=true
+          # An inbound MARIMO_TOKEN must never survive into the shell
+          # environment: with auth on it would shadow the resolved token,
+          # and with auth disabled it would export a token for a server
+          # that accepts none. Both branches get a poisoned value.
+          run_suite "inbound MARIMO_TOKEN does not shadow the resolved one" \
+            -e MARIMO_TOKEN=poisoned-inbound-value
+          run_suite "auth disabled" -e MARIMO_DISABLE_AUTH=true \
+            -e MARIMO_TOKEN=poisoned-inbound-value

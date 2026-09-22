@@ -107,6 +107,41 @@ RUN curl -fsSL "https://github.com/runpod/runpodctl/releases/download/${RUNPODCT
     echo "${RUNPODCTL_SHA256}  /usr/local/bin/runpodctl" | sha256sum -c && \
     chmod +x /usr/local/bin/runpodctl
 
+# ── marimo-pair skill ────────────────────────────────────────────────────────
+# The marimo-pair agent skill (https://github.com/marimo-team/marimo-pair)
+# lets a coding agent drive the live marimo kernel instead of editing the
+# notebook file behind the kernel's back. It is markdown plus bash — its only
+# runtime deps are bash, curl and jq, all installed above — so it does not
+# touch the no-domain-packages rule: nothing here is importable from a
+# notebook.
+#
+# Upstream documents `npx skills add` or the Claude Code plugin marketplace.
+# Neither is usable here: the `nodejs` apt package ships no npm/npx, and an
+# unpinned network install at build time would be the only unverified download
+# in this image. So the release tarball is pinned and checksum-verified like
+# every other tool above. The repo publishes no release assets, hence the
+# generated tag archive and `datasource=github-tags`.
+#
+# Only skills/marimo-pair is extracted; the sibling retro-marimo-pair skill
+# is an upstream-feedback command with no use on a pod. LICENSE lives at the
+# repo root, outside the extracted subtree, so it is unpacked separately —
+# this image is published publicly and ships Apache-2.0 code.
+# renovate: datasource=github-tags depName=marimo-team/marimo-pair
+ARG MARIMO_PAIR_VERSION=v0.0.20
+ARG MARIMO_PAIR_SHA256=7627a0396e06527f1fd0d55e0fe1975a554440eaf960eba91fa1ab3ceeda40e8
+RUN curl -fsSL "https://github.com/marimo-team/marimo-pair/archive/refs/tags/${MARIMO_PAIR_VERSION}.tar.gz" \
+        -o /tmp/marimo-pair.tar.gz && \
+    echo "${MARIMO_PAIR_SHA256}  /tmp/marimo-pair.tar.gz" | sha256sum -c && \
+    mkdir -p /opt/agent-skills /usr/share/licenses/marimo-pair && \
+    tar -xzf /tmp/marimo-pair.tar.gz -C /opt/agent-skills --strip-components=2 \
+        "marimo-pair-${MARIMO_PAIR_VERSION#v}/skills/marimo-pair" && \
+    tar -xzf /tmp/marimo-pair.tar.gz -C /usr/share/licenses/marimo-pair --strip-components=1 \
+        "marimo-pair-${MARIMO_PAIR_VERSION#v}/LICENSE" && \
+    rm /tmp/marimo-pair.tar.gz && \
+    printf 'marimo-pair %s\nhttps://github.com/marimo-team/marimo-pair\nApache-2.0; license at /usr/share/licenses/marimo-pair/LICENSE\n' \
+        "${MARIMO_PAIR_VERSION}" > /opt/agent-skills/marimo-pair/PROVENANCE && \
+    chmod -R a+rX /opt/agent-skills /usr/share/licenses/marimo-pair
+
 # ── runpod user ──────────────────────────────────────────────────────────────
 # Passwordless sudo is scoped to apt-get/apt so users can install system
 # packages from notebooks and terminals. This is an intentional tradeoff:
@@ -120,8 +155,55 @@ RUN useradd -m -s /bin/bash runpod && \
 # workspace directory is created at runtime by start_marimo.sh so it can
 # match the actual mount point (/workspace when a Runpod network volume
 # is attached, or wherever MARIMO_WORKSPACE points).
+#
+# The marimo-pair skill is linked into the per-user skill directories that
+# agent harnesses scan, for BOTH identities a user can land as. This image
+# sets no USER, so `docker exec` and the Runpod console give a root shell,
+# and start_marimo.sh authorizes SSH keys into /root/.ssh — only marimo
+# itself runs as runpod. Linking under /home/runpod alone would leave the
+# skill undiscoverable for the shell most users actually get.
+#
+# `.claude/skills` is Claude Code's user-global location; `.agents/skills`
+# is the cross-client Agent Skills convention. Both harnesses follow
+# symlinks, so one canonical copy under /opt serves every link.
 RUN mkdir -p /home/runpod/.config/marimo && \
-    chown -R runpod:runpod /home/runpod
+    for home in /root /home/runpod; do \
+        mkdir -p "${home}/.claude/skills" "${home}/.agents/skills" && \
+        ln -sfn /opt/agent-skills/marimo-pair "${home}/.claude/skills/marimo-pair" && \
+        ln -sfn /opt/agent-skills/marimo-pair "${home}/.agents/skills/marimo-pair"; \
+    done && \
+    chown -Rh runpod:runpod /home/runpod
+
+# ── Non-login shell environment ──────────────────────────────────────────────
+# /etc/profile.d is sourced only by LOGIN shells. The Runpod SSH proxy and
+# `docker exec` both exec bash directly without one — the MOTD removed in
+# 0.6.0 hit exactly this failure — so an agent launched from the shell a
+# user actually gets would not see MARIMO_TOKEN and could not authenticate
+# against :2971.
+#
+# The value is read from the token file at shell start rather than baked in
+# here, so it cannot go stale across a pod restart, and the token file's
+# presence is treated as authoritative: absent (auth disabled, where
+# start_marimo.sh removes it) means any inbound MARIMO_TOKEN inherited from
+# the container environment is cleared rather than left pointing at a server
+# that accepts no token.
+# Ubuntu's stock .bashrc returns early for non-interactive shells, so
+# this covers interactive ones; a scripted `docker exec bash -c` should read
+# the token file directly, as the READMEs document.
+# hadolint ignore=SC2016  # the $(cat ...) must reach .bashrc unexpanded
+RUN printf '%s\n' \
+        '' \
+        '# Resolved marimo access token, for marimo-pair and other agent tooling.' \
+        '# Read here because /etc/profile.d reaches only login shells.' \
+        '# Authoritative in both directions: an inbound MARIMO_TOKEN pod env' \
+        '# var is inherited straight from the container environment, so it' \
+        '# must be cleared when the server is running without auth.' \
+        'if [ -r /home/runpod/.config/marimo/token ]; then' \
+        '    MARIMO_TOKEN=$(cat /home/runpod/.config/marimo/token) && export MARIMO_TOKEN' \
+        'else' \
+        '    unset MARIMO_TOKEN' \
+        'fi' \
+    | tee -a /root/.bashrc >> /home/runpod/.bashrc
 
 # ── Runtime environment overrides ────────────────────────────────────────────
 # UV: explicit path so marimo can find uv for in-notebook package installation.

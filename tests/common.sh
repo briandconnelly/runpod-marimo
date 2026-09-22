@@ -212,6 +212,64 @@ shared_tests() {
     check "marimo.toml: ty LSP enabled"      "grep -qF 'enabled = true' $MARIMO_TOML"
     check "marimo.toml: mcp marimo preset"   "grep -qF 'presets = [\"marimo\"]' $MARIMO_TOML"
 
+    section "marimo-pair skill"
+    local SKILL_DIR=/opt/agent-skills/marimo-pair
+    check "skill payload present"    "test -r $SKILL_DIR/SKILL.md"
+    # Upstream ships both scripts 0755; `chmod -R a+rX` in the Dockerfile
+    # preserves that (X adds +x only where it already exists, plus dirs),
+    # so the exec bit surviving the extract is worth asserting.
+    check "execute-code.sh executable"    "test -x $SKILL_DIR/scripts/execute-code.sh"
+    check "discover-servers.sh executable" "test -x $SKILL_DIR/scripts/discover-servers.sh"
+    check "upstream LICENSE shipped" "test -r /usr/share/licenses/marimo-pair/LICENSE"
+    check "provenance recorded"      "grep -q '^marimo-pair v' $SKILL_DIR/PROVENANCE"
+
+    # Both identities matter: this image sets no USER, so docker exec and
+    # the Runpod console give a root shell, while marimo runs as runpod.
+    # A skill linked for only one of them is invisible to half the users.
+    local skill_home skill_dir_name
+    for skill_home in /root /home/runpod; do
+        for skill_dir_name in .claude .agents; do
+            check "${skill_home}/${skill_dir_name}/skills link resolves" \
+                "[[ \$(readlink -f ${skill_home}/${skill_dir_name}/skills/marimo-pair) == $SKILL_DIR ]]"
+            check "${skill_home}/${skill_dir_name}/skills readable through link" \
+                "test -r ${skill_home}/${skill_dir_name}/skills/marimo-pair/SKILL.md"
+        done
+    done
+    check "runpod can read its own skill link" \
+        "su -l runpod -c 'test -r ~/.claude/skills/marimo-pair/SKILL.md'"
+
+    # Functional probe. execute-code.sh resolves MARIMO_TOKEN, then hits
+    # GET /api/sessions before executing anything, so it exercises the real
+    # auth path headlessly. It cannot succeed outright without a notebook
+    # open in a browser, and it CAN succeed if someone has one open (this
+    # suite also runs against live pods via run-remote.sh) — so accept
+    # either, and pin the assertion on the server having been reached with
+    # a working token rather than on a single expected message.
+    #
+    # The auth boundary itself is already covered by the 401/200 checks in
+    # the HTTP endpoint section above; this asserts the skill's own script
+    # picks up the exported token, which those cannot see.
+    if [[ "${MARIMO_DISABLE_AUTH:-}" != "true" ]]; then
+        # Output goes to files rather than into the `check` string: it is
+        # program output, so a stray quote in it would otherwise break the
+        # eval inside check.
+        local PAIR_OUT=/tmp/marimo-pair-probe.out
+        local PAIR_OUT_NOTOKEN=/tmp/marimo-pair-probe-notoken.out
+        su -l runpod -c \
+            "bash $SKILL_DIR/scripts/execute-code.sh --url http://localhost:2971 -c pass" \
+            > "$PAIR_OUT" 2>&1 || true
+        check "execute-code.sh authenticates via exported MARIMO_TOKEN" \
+            "! grep -qF 'Failed to connect' $PAIR_OUT"
+        # Negative control: the same call with the token stripped must not
+        # get past auth. Without it, the check above would also pass against
+        # a server that required no token at all.
+        su -l runpod -c \
+            "MARIMO_TOKEN= bash $SKILL_DIR/scripts/execute-code.sh --url http://localhost:2971 -c pass" \
+            > "$PAIR_OUT_NOTOKEN" 2>&1 || true
+        check "execute-code.sh is rejected without a token" \
+            "grep -qF 'Failed to connect' $PAIR_OUT_NOTOKEN"
+    fi
+
     section "Env forwarding"
     local RE_ENV=/etc/profile.d/runpod-env.sh
     local ZZ_ENV=/etc/profile.d/zz-pod-env.sh
@@ -223,6 +281,51 @@ shared_tests() {
     check "zz-pod-env.sh does not leak JUPYTER_PASSWORD"      "! grep -q '^export JUPYTER_PASSWORD' $ZZ_ENV"
     check "zz-pod-env.sh does not leak MARIMO_TOKEN_PASSWORD" "! grep -q '^export MARIMO_TOKEN_PASSWORD' $ZZ_ENV"
     check "zz-pod-env.sh does not leak MARIMO_DISABLE_AUTH"   "! grep -q '^export MARIMO_DISABLE_AUTH' $ZZ_ENV"
+
+    # MARIMO_TOKEN is deliberately exported (so bundled agent tooling can
+    # authenticate), but only the value the Authentication block resolved.
+    # An inbound MARIMO_TOKEN is excluded from _forward_env, so with auth
+    # disabled nothing must be exported even if the pod set one — assert
+    # the resolved value, never mere presence, or a stale pod-supplied
+    # token would satisfy the check.
+    # Both shell flavours must be covered. /etc/profile.d reaches only login
+    # shells, but the Runpod SSH proxy and `docker exec` exec bash directly
+    # without one (see the 0.6.0 MOTD removal), so a login-shell-only check
+    # would pass while the shell users actually get had no token at all.
+    # `bash -ic` is the interactive non-login path; stderr is dropped because
+    # bash warns about job control when stdin is not a tty.
+    # Captured to files rather than compared inline: a token can legitimately
+    # contain shell metacharacters (CI exercises `sp3c!al ch@rs&?`), and the
+    # eval inside `check` would mangle it. `cmp` sidesteps quoting entirely.
+    local TOKFILE=/home/runpod/.config/marimo/token
+    local u
+    for u in root runpod; do
+        # shellcheck disable=SC2016  # $MARIMO_TOKEN must expand in the inner shell
+        su -l "$u" -c 'printf %s "$MARIMO_TOKEN"' > "/tmp/tok-login-$u" 2>/dev/null || true
+        # shellcheck disable=SC2016  # as above; -i is the interactive non-login path
+        su "$u" -c 'bash -ic "printf %s \"\$MARIMO_TOKEN\""' > "/tmp/tok-inter-$u" 2>/dev/null || true
+    done
+    if [[ "${MARIMO_DISABLE_AUTH:-}" == "true" ]]; then
+        check "zz-pod-env.sh omits MARIMO_TOKEN (auth disabled)" \
+            "! grep -q '^export MARIMO_TOKEN=' $ZZ_ENV"
+        # start_marimo.sh removes the token file when auth is disabled, so
+        # the .bashrc hook has nothing to read and cannot resurrect a token
+        # left behind by an earlier boot with auth on.
+        check "token file removed (auth disabled)" "! test -e $TOKFILE"
+        for u in root runpod; do
+            check "$u interactive shell has no MARIMO_TOKEN (auth disabled)" \
+                "! test -s /tmp/tok-inter-$u"
+        done
+    else
+        check "zz-pod-env.sh exports MARIMO_TOKEN" \
+            "grep -q '^export MARIMO_TOKEN=' $ZZ_ENV"
+        for u in root runpod; do
+            check "$u login shell MARIMO_TOKEN matches the token file" \
+                "cmp -s /tmp/tok-login-$u $TOKFILE"
+            check "$u interactive shell MARIMO_TOKEN matches the token file" \
+                "cmp -s /tmp/tok-inter-$u $TOKFILE"
+        done
+    fi
 
     section "User and permissions"
     check "runpod user exists"            "id runpod"
