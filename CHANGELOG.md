@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-09-22
+
 ### Added
 
 - The [marimo-pair](https://github.com/marimo-team/marimo-pair) agent skill (v0.0.20, Apache-2.0) ships preinstalled, so a coding agent brought into the pod can drive the live notebook kernel instead of editing the `.py` file behind the running kernel's back. The payload lives at `/opt/agent-skills/marimo-pair` and is symlinked into `~/.claude/skills/` and `~/.agents/skills/` for **both** `root` and `runpod` — this image sets no `USER`, so `docker exec` and SSH give a root shell while marimo runs as `runpod`, and linking only one of them would leave the skill undiscoverable for half of the shells users actually get. Upstream's `npx skills add` install is not usable at build time (the `nodejs` apt package ships no npm/npx), so the tarball is pinned and checksum-verified like every other download in the image. Nothing Python-importable is added; the skill is markdown plus bash over the already-present `curl` and `jq`.
@@ -15,6 +17,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - The resolved marimo access token is now exported as `MARIMO_TOKEN` into login shells (via `/etc/profile.d`) **and** interactive shells (via a `.bashrc` hook for both `root` and `runpod`), so marimo-pair and any other agent tooling can authenticate against `:2971` without setup. The `.bashrc` hook reads the token file at shell start rather than baking in a value, so it cannot go stale across a pod restart. Both paths are needed: the Runpod SSH proxy and `docker exec` exec bash directly without a login shell, so `/etc/profile.d` alone would have left the token unset in the shell users actually get — the same gap that made the MOTD removed in 0.6.0 never appear. A non-interactive `docker exec bash -c` sources neither startup file; the READMEs document reading the token file directly there. When `MARIMO_DISABLE_AUTH=true`, the token file is now removed at startup, so a pod that previously ran with auth cannot leave one behind for the hook to export. Previously the token reached only `--token-password-file`; the READMEs said it was not forwarded into shell environments, and that is no longer true. This does not widen who can read the token: both identities that get a shell (`root`, and `runpod` via marimo) could already read `/home/runpod/.config/marimo/token`, and the token is printed to the pod logs. An inbound `MARIMO_TOKEN` pod env var is now excluded from generic env forwarding so it cannot leave a stale token exported under `MARIMO_DISABLE_AUTH=true` or shadow the resolved value.
 - Updated marimo to 0.24.2.
+- Updated Python to 3.13.15.
+- Updated uv to 0.12.17.
+- Updated huggingface_hub to 1.32.0.
+- Updated ty to 0.0.83.
+- Updated GitHub CLI to v2.101.0.
+- Updated runpodctl to v2.14.0.
 - Updated `hadolint/hadolint-action` to 3.5.0, and rewrote the container `HEALTHCHECK` in JSON (exec) notation. The hadolint 2.15.1 that action ships flags the shell form as `DL3025`, and CI lints at `failure-threshold: info`. The probe still needs a shell for its `||`, so one is named explicitly; behaviour is unchanged apart from running under `/bin/sh` instead of the bash named by `SHELL`, which no part of the one-line probe depends on.
 - The MCP smoke tests now assert the symbols marimo imports under mcp 2.x — `mcp.client.streamable_http.streamable_http_client`, `mcp.server.MCPServer`, and `mcp.Client` — in place of the mcp 1.x symbols (`streamablehttp_client`, `mcp.server.fastmcp.FastMCP`) that release removed.
 
