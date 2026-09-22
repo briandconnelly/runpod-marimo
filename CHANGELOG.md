@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Condensed the pod-template READMEs (`README-gpu.md`, `README-cpu.md`) to fit Runpod's 5000-character template-description limit (GPU 7544 -> 4896, CPU 6805 -> 4502). No facts were dropped: sections were tightened, the GPU-package note folded into the reproducibility section, the shared-volume `HF_HOME` caveat reduced to one sentence, and a link to the repository README added for the full documentation. `README.md` keeps the long-form text.
+
 ## [0.9.0] - 2026-09-22
 
 ### Added
