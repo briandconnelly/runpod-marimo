@@ -15,6 +15,18 @@ Marimo runs with `--sandbox` so each notebook executes in an isolated `uv` envir
 Pre-installing packages lets users write imports that work in the pod but have no record in the notebook, silently breaking reproducibility.
 This applies even when a package seems universally useful — users install what they need through marimo's package manager, which writes it into the notebook header.
 
+## Pod-template READMEs
+
+`README-gpu.md` and `README-cpu.md` are pasted into Runpod's pod-template description field, which is capped at **5000 characters**.
+Keep both under it — after editing either one, check:
+
+```sh
+wc -m README-gpu.md README-cpu.md
+```
+
+Nothing in CI enforces this.
+`README.md` is the long-form documentation and has no limit; when trimming a variant README, move the detail there (or confirm it is already there) and link to the repository rather than deleting it.
+
 ## Releases
 
 Releases are ad hoc: cut a version tag when a meaningful set of changes has accumulated.
