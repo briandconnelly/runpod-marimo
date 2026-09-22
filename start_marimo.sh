@@ -317,23 +317,24 @@ MARIMO_ARGS="edit --host 0.0.0.0 --port 2971 ${AUTH_FLAG} --sandbox ${WORKSPACE_
 # files uploaded through marimo's UI land in /home/runpod (ephemeral
 # container state) even though the file browser shows /workspace.
 #
-# `--with 'mcp<2'` caps a transitive dependency that marimo itself leaves
-# unbounded. marimo's [mcp] extra declares `mcp>=1.0.0`, but mcp 2.0.0
-# (2026-07-28) removed `streamablehttp_client` and the whole
-# `mcp.server.fastmcp` module, both of which marimo 0.23.15 imports at
-# runtime — so an unconstrained resolve leaves the MCP integration broken
-# with an ImportError at connect time. Upstream:
-# https://github.com/marimo-team/marimo/issues/10371
+# No `--with 'mcp<2'` cap: marimo 0.24.1 moved to the mcp 2.x API and its
+# [mcp] extra now declares `mcp>=2.0.0,<3`, so marimo bounds the dependency
+# itself. The cap this replaces existed because 0.23.x declared an unbounded
+# `mcp>=1.0.0` while importing symbols mcp 2.0.0 removed
+# (marimo-team/marimo#10371); re-adding a cap here would now make the resolve
+# unsatisfiable.
+#
+# The cost of having no cap is that overriding MARIMO_VERSION *down* to a
+# 0.23.x release resolves mcp 2.x against a marimo that predates it, leaving
+# MCP unavailable (marimo itself still starts). That is the pre-0.8.1
+# behaviour, and it is unavoidable with a static cap: 0.23.x needs mcp<2 and
+# 0.24.1+ refuses it. Version-conditional capping is deliberately not
+# attempted here — it would branch on an unvalidated env var inside the
+# string handed to `su -c`, and would split the prewarmed uvx cache.
 #
 # The requirement set here must stay in sync with the prewarm in the
-# Dockerfile: uvx keys its cached tool env on the full set, so dropping or
-# changing the cap on one side silently turns first boot into a fresh
-# download instead of a cache hit. The two spellings differ (the Dockerfile
-# quotes the argument, this uses %q) but must resolve to the same argv.
-#
-# Drop the cap once marimo ships a release that supports mcp 2.x. The
-# constraint is %q-escaped like the spec below because `<` would otherwise
-# be parsed as a redirection by the `su -l` shell.
-MCP_CONSTRAINT_Q=$(printf '%q' 'mcp<2')
+# Dockerfile: uvx keys its cached tool env on the full set, so adding a
+# `--with` on one side silently turns first boot into a fresh download
+# instead of a cache hit.
 MARIMO_SPEC_Q=$(printf '%q' "marimo[mcp,lsp]==${MARIMO_VERSION}")
-exec su -l runpod -c "cd ${WORKSPACE_Q} && uvx --with ${MCP_CONSTRAINT_Q} ${MARIMO_SPEC_Q} $MARIMO_ARGS"
+exec su -l runpod -c "cd ${WORKSPACE_Q} && uvx ${MARIMO_SPEC_Q} $MARIMO_ARGS"

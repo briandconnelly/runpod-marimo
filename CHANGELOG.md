@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Overriding `MARIMO_VERSION` to marimo 0.24.1 or newer no longer kills the pod. The `uvx --with 'mcp<2'` cap added in 0.8.1 became unsatisfiable once marimo's `[mcp]` extra moved to `mcp>=2.0.0,<3` in 0.24.1, so the launcher's resolve failed and marimo never bound :2971. The cap is removed; marimo now supplies the upper bound that was missing when 0.8.1 had to add one ([marimo#10371](https://github.com/marimo-team/marimo/issues/10371)). Overriding `MARIMO_VERSION` *down* to a 0.23.x release now resolves mcp 2.x against a marimo that predates it, which leaves MCP unavailable exactly as it did before 0.8.1 — no static cap can serve both sides of marimo's API break.
+
+### Changed
+
+- Updated marimo to 0.24.2.
+- The MCP smoke tests now assert the symbols marimo imports under mcp 2.x — `mcp.client.streamable_http.streamable_http_client`, `mcp.server.MCPServer`, and `mcp.Client` — in place of the mcp 1.x symbols (`streamablehttp_client`, `mcp.server.fastmcp.FastMCP`) that release removed.
+
 ## [0.8.1] - 2026-07-28
 
 ### Fixed
