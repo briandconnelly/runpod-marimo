@@ -324,6 +324,14 @@ MARIMO_ARGS="edit --host 0.0.0.0 --port 2971 ${AUTH_FLAG} --sandbox ${WORKSPACE_
 # (marimo-team/marimo#10371); re-adding a cap here would now make the resolve
 # unsatisfiable.
 #
+# The cost of having no cap is that overriding MARIMO_VERSION *down* to a
+# 0.23.x release resolves mcp 2.x against a marimo that predates it, leaving
+# MCP unavailable (marimo itself still starts). That is the pre-0.8.1
+# behaviour, and it is unavoidable with a static cap: 0.23.x needs mcp<2 and
+# 0.24.1+ refuses it. Version-conditional capping is deliberately not
+# attempted here — it would branch on an unvalidated env var inside the
+# string handed to `su -c`, and would split the prewarmed uvx cache.
+#
 # The requirement set here must stay in sync with the prewarm in the
 # Dockerfile: uvx keys its cached tool env on the full set, so adding a
 # `--with` on one side silently turns first boot into a fresh download
