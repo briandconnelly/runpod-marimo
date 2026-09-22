@@ -78,8 +78,8 @@ COPY --from=uv-dist /uv /uvx /usr/local/bin/
 
 # ── GitHub CLI ───────────────────────────────────────────────────────────────
 # renovate: datasource=github-releases depName=cli/cli
-ARG GH_VERSION=v2.96.0
-ARG GH_SHA256=83d5c2ccad5498f58bf6368acb1ab32588cf43ab3a4b1c301bf36328b1c8bd60
+ARG GH_VERSION=v2.101.0
+ARG GH_SHA256=9bca2d1c16825f109907a23307628a2f0698fbf99662b73a5cf0b020293072b8
 RUN curl -fsSL "https://github.com/cli/cli/releases/download/${GH_VERSION}/gh_${GH_VERSION#v}_linux_amd64.tar.gz" \
         -o /tmp/gh.tar.gz && \
     echo "${GH_SHA256}  /tmp/gh.tar.gz" | sha256sum -c && \
@@ -100,8 +100,8 @@ RUN curl -fsSL "https://github.com/duckdb/duckdb/releases/download/${DUCKDB_VERS
 
 # ── runpodctl ────────────────────────────────────────────────────────────────
 # renovate: datasource=github-releases depName=runpod/runpodctl
-ARG RUNPODCTL_VERSION=v2.7.2
-ARG RUNPODCTL_SHA256=acf5c49a3192b522e95cae92539fa6fcd8be8c48802aa26c7f3f2ec980ab4f5c
+ARG RUNPODCTL_VERSION=v2.14.0
+ARG RUNPODCTL_SHA256=2e0fd370a52a0fc7e43a6434a209348a4f6836fcdf1ad2b093b609e938138be9
 RUN curl -fsSL "https://github.com/runpod/runpodctl/releases/download/${RUNPODCTL_VERSION}/runpodctl-linux-amd64" \
         -o /usr/local/bin/runpodctl && \
     echo "${RUNPODCTL_SHA256}  /usr/local/bin/runpodctl" | sha256sum -c && \
