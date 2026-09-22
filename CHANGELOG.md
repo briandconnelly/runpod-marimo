@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- The [marimo-pair](https://github.com/marimo-team/marimo-pair) agent skill (v0.0.20, Apache-2.0) ships preinstalled, so a coding agent brought into the pod can drive the live notebook kernel instead of editing the `.py` file behind the running kernel's back. The payload lives at `/opt/agent-skills/marimo-pair` and is symlinked into `~/.claude/skills/` and `~/.agents/skills/` for **both** `root` and `runpod` — this image sets no `USER`, so `docker exec` and SSH give a root shell while marimo runs as `runpod`, and linking only one of them would leave the skill undiscoverable for half of the shells users actually get. Upstream's `npx skills add` install is not usable at build time (the `nodejs` apt package ships no npm/npx), so the tarball is pinned and checksum-verified like every other download in the image. Nothing Python-importable is added; the skill is markdown plus bash over the already-present `curl` and `jq`.
+
+### Changed
+
+- The resolved marimo access token is now exported as `MARIMO_TOKEN` into the marimo and SSH login shell environments, so marimo-pair and any other agent tooling can authenticate against `:2971` without setup. Previously the token reached only `--token-password-file`; the READMEs said it was not forwarded into shell environments, and that is no longer true. This does not widen who can read the token: both identities that get a shell (`root`, and `runpod` via marimo) could already read `/home/runpod/.config/marimo/token`, and the token is printed to the pod logs. An inbound `MARIMO_TOKEN` pod env var is now excluded from generic env forwarding so it cannot leave a stale token exported under `MARIMO_DISABLE_AUTH=true` or shadow the resolved value.
+
 ### Fixed
 
 - Overriding `MARIMO_VERSION` to marimo 0.24.1 or newer no longer kills the pod. The `uvx --with 'mcp<2'` cap added in 0.8.1 became unsatisfiable once marimo's `[mcp]` extra moved to `mcp>=2.0.0,<3` in 0.24.1, so the launcher's resolve failed and marimo never bound :2971. The cap is removed; marimo now supplies the upper bound that was missing when 0.8.1 had to add one ([marimo#10371](https://github.com/marimo-team/marimo/issues/10371)). Overriding `MARIMO_VERSION` *down* to a 0.23.x release now resolves mcp 2.x against a marimo that predates it, which leaves MCP unavailable exactly as it did before 0.8.1 — no static cap can serve both sides of marimo's API break.
