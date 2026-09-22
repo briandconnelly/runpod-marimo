@@ -18,13 +18,14 @@ This applies even when a package seems universally useful — users install what
 ## Pod-template READMEs
 
 `README-gpu.md` and `README-cpu.md` are pasted into Runpod's pod-template description field, which is capped at **5000 characters**.
-Keep both under it — after editing either one, check:
+Keep both under it — after editing either one, run:
 
 ```sh
-wc -m README-gpu.md README-cpu.md
+scripts/check-readme-length.sh
 ```
 
-Nothing in CI enforces this.
+CI's `lint` job runs the same check on every pull request.
+It measures bytes rather than characters, which is the conservative bound: a UTF-8 byte count is never below the character count.
 `README.md` is the long-form documentation and has no limit; when trimming a variant README, move the detail there (or confirm it is already there) and link to the repository rather than deleting it.
 
 ## Releases

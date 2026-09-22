@@ -114,6 +114,13 @@ jobs:
         with:
           dockerfile: Dockerfile
 
+      # The variant READMEs are pasted into Runpod's pod-template
+      # description field, which is capped at 5000 characters. Nothing
+      # else in CI reads them, so an over-length one would only surface
+      # when someone tried to publish the template.
+      - name: Check pod-template README length
+        run: scripts/check-readme-length.sh
+
   build:
     runs-on: ubuntu-latest
     needs: checksums

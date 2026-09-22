@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `scripts/check-readme-length.sh`, run by CI's `lint` job, fails the build if `README-gpu.md` or `README-cpu.md` exceeds the 5000-character cap on Runpod's pod-template description field. Nothing in the image build reads those files, so an over-length README previously surfaced only when someone tried to publish the template. The check measures bytes rather than characters because a UTF-8 byte count is never below the character count, making it the conservative bound for text that uses em dashes freely.
+
 ### Changed
 
 - Condensed the pod-template READMEs (`README-gpu.md`, `README-cpu.md`) to fit Runpod's 5000-character template-description limit (GPU 7544 -> 4896, CPU 6805 -> 4502). No facts were dropped: sections were tightened, the GPU-package note folded into the reproducibility section, the shared-volume `HF_HOME` caveat reduced to one sentence, and a link to the repository README added for the full documentation. `README.md` keeps the long-form text.
