@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Updated marimo to 0.24.2.
+- Updated `hadolint/hadolint-action` to 3.5.0, and rewrote the container `HEALTHCHECK` in JSON (exec) notation. The hadolint 2.15.1 that action ships flags the shell form as `DL3025`, and CI lints at `failure-threshold: info`. The probe still needs a shell for its `||`, so one is named explicitly; behaviour is unchanged apart from running under `/bin/sh` instead of the bash named by `SHELL`, which no part of the one-line probe depends on.
 - The MCP smoke tests now assert the symbols marimo imports under mcp 2.x — `mcp.client.streamable_http.streamable_http_client`, `mcp.server.MCPServer`, and `mcp.Client` — in place of the mcp 1.x symbols (`streamablehttp_client`, `mcp.server.fastmcp.FastMCP`) that release removed.
 
 ## [0.8.1] - 2026-07-28
