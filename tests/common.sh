@@ -288,14 +288,43 @@ shared_tests() {
     # disabled nothing must be exported even if the pod set one — assert
     # the resolved value, never mere presence, or a stale pod-supplied
     # token would satisfy the check.
+    # Both shell flavours must be covered. /etc/profile.d reaches only login
+    # shells, but the Runpod SSH proxy and `docker exec` exec bash directly
+    # without one (see the 0.6.0 MOTD removal), so a login-shell-only check
+    # would pass while the shell users actually get had no token at all.
+    # `bash -ic` is the interactive non-login path; stderr is dropped because
+    # bash warns about job control when stdin is not a tty.
+    # Captured to files rather than compared inline: a token can legitimately
+    # contain shell metacharacters (CI exercises `sp3c!al ch@rs&?`), and the
+    # eval inside `check` would mangle it. `cmp` sidesteps quoting entirely.
+    local TOKFILE=/home/runpod/.config/marimo/token
+    local u
+    for u in root runpod; do
+        # shellcheck disable=SC2016  # $MARIMO_TOKEN must expand in the inner shell
+        su -l "$u" -c 'printf %s "$MARIMO_TOKEN"' > "/tmp/tok-login-$u" 2>/dev/null || true
+        # shellcheck disable=SC2016  # as above; -i is the interactive non-login path
+        su "$u" -c 'bash -ic "printf %s \"\$MARIMO_TOKEN\""' > "/tmp/tok-inter-$u" 2>/dev/null || true
+    done
     if [[ "${MARIMO_DISABLE_AUTH:-}" == "true" ]]; then
         check "zz-pod-env.sh omits MARIMO_TOKEN (auth disabled)" \
             "! grep -q '^export MARIMO_TOKEN=' $ZZ_ENV"
+        # start_marimo.sh removes the token file when auth is disabled, so
+        # the .bashrc hook has nothing to read and cannot resurrect a token
+        # left behind by an earlier boot with auth on.
+        check "token file removed (auth disabled)" "! test -e $TOKFILE"
+        for u in root runpod; do
+            check "$u interactive shell has no MARIMO_TOKEN (auth disabled)" \
+                "! test -s /tmp/tok-inter-$u"
+        done
     else
         check "zz-pod-env.sh exports MARIMO_TOKEN" \
             "grep -q '^export MARIMO_TOKEN=' $ZZ_ENV"
-        check "login-shell MARIMO_TOKEN matches the token file" \
-            "[[ \$(su -l runpod -c 'printf %s \"\$MARIMO_TOKEN\"') == \$(cat /home/runpod/.config/marimo/token) ]]"
+        for u in root runpod; do
+            check "$u login shell MARIMO_TOKEN matches the token file" \
+                "cmp -s /tmp/tok-login-$u $TOKFILE"
+            check "$u interactive shell MARIMO_TOKEN matches the token file" \
+                "cmp -s /tmp/tok-inter-$u $TOKFILE"
+        done
     fi
 
     section "User and permissions"

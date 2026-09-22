@@ -174,6 +174,37 @@ RUN mkdir -p /home/runpod/.config/marimo && \
     done && \
     chown -Rh runpod:runpod /home/runpod
 
+# ── Non-login shell environment ──────────────────────────────────────────────
+# /etc/profile.d is sourced only by LOGIN shells. The Runpod SSH proxy and
+# `docker exec` both exec bash directly without one — the MOTD removed in
+# 0.6.0 hit exactly this failure — so an agent launched from the shell a
+# user actually gets would not see MARIMO_TOKEN and could not authenticate
+# against :2971.
+#
+# The value is read from the token file at shell start rather than baked in
+# here, so it cannot go stale across a pod restart, and the token file's
+# presence is treated as authoritative: absent (auth disabled, where
+# start_marimo.sh removes it) means any inbound MARIMO_TOKEN inherited from
+# the container environment is cleared rather than left pointing at a server
+# that accepts no token.
+# Ubuntu's stock .bashrc returns early for non-interactive shells, so
+# this covers interactive ones; a scripted `docker exec bash -c` should read
+# the token file directly, as the READMEs document.
+# hadolint ignore=SC2016  # the $(cat ...) must reach .bashrc unexpanded
+RUN printf '%s\n' \
+        '' \
+        '# Resolved marimo access token, for marimo-pair and other agent tooling.' \
+        '# Read here because /etc/profile.d reaches only login shells.' \
+        '# Authoritative in both directions: an inbound MARIMO_TOKEN pod env' \
+        '# var is inherited straight from the container environment, so it' \
+        '# must be cleared when the server is running without auth.' \
+        'if [ -r /home/runpod/.config/marimo/token ]; then' \
+        '    MARIMO_TOKEN=$(cat /home/runpod/.config/marimo/token) && export MARIMO_TOKEN' \
+        'else' \
+        '    unset MARIMO_TOKEN' \
+        'fi' \
+    | tee -a /root/.bashrc >> /home/runpod/.bashrc
+
 # ── Runtime environment overrides ────────────────────────────────────────────
 # UV: explicit path so marimo can find uv for in-notebook package installation.
 # UV_PYTHON_INSTALL_DIR: shared system location for uv-managed Python

@@ -259,6 +259,12 @@ TOKEN_FILE=/home/runpod/.config/marimo/token
 if [[ "${MARIMO_DISABLE_AUTH:-}" == "true" ]]; then
     echo "Warning: MARIMO_DISABLE_AUTH=true — the marimo UI is reachable without a password by anyone with this pod's proxy URL." >&2
     AUTH_FLAG="--no-token"
+    # Drop any token left by a previous boot. Runpod preserves the container
+    # filesystem across stop/start, so a pod that ran with auth and restarts
+    # with MARIMO_DISABLE_AUTH=true would otherwise keep a stale token file —
+    # which the .bashrc hook would then export as MARIMO_TOKEN. Removing it
+    # keeps the invariant the hook relies on: the file exists iff auth is on.
+    rm -f "$TOKEN_FILE"
 else
     if [[ -n "${MARIMO_TOKEN_PASSWORD:-}" ]]; then
         echo "Token authentication enabled (MARIMO_TOKEN_PASSWORD)."

@@ -58,7 +58,7 @@ The image therefore enables marimo's token authentication by default, resolving 
 3. A random token generated at startup (rotates on every restart).
 
 Whatever the source, the startup logs print a ready-to-use access URL (`https://<pod-id>-2971.proxy.runpod.net/?access_token=...`) — open the pod's logs in the Runpod console to find it. The resolved token is also stored at `/home/runpod/.config/marimo/token`.
-The token is passed to marimo via `--token-password-file`, so it does not appear in `ps` output or `/proc/<pid>/cmdline`. It **is** exported as `MARIMO_TOKEN` into the marimo and SSH login shell environments, so the bundled [marimo-pair](#pairing-with-a-coding-agent) skill and any agent you bring into the pod can authenticate without setup. This does not widen who can read it: every identity that gets a shell here (`root`, and `runpod` via marimo) can already read the token file, and the token is printed to the pod logs.
+The token is passed to marimo via `--token-password-file`, so it does not appear in `ps` output or `/proc/<pid>/cmdline`. It **is** exported as `MARIMO_TOKEN` into login and interactive shell environments, so the bundled [marimo-pair](#pairing-with-a-coding-agent) skill and any agent you bring into the pod can authenticate without setup. This does not widen who can read it: every identity that gets a shell here (`root`, and `runpod` via marimo) can already read the token file, and the token is printed to the pod logs.
 
 Set `MARIMO_DISABLE_AUTH=true` to opt out and run with `--no-token`. Only do this if something else restricts access to port 2971.
 
@@ -91,6 +91,12 @@ Bring your own agent CLI (none is preinstalled), open a notebook in the browser,
 http://localhost:2971
 ```
 
-Give the URL explicitly. marimo's auto-discovery only registers servers started with `--no-token`, and this image enables token authentication by default. The resolved token is already exported as `MARIMO_TOKEN` in every login shell, so no other setup is needed.
+Give the URL explicitly. marimo's auto-discovery only registers servers started with `--no-token`, and this image enables token authentication by default.
+
+The resolved token is already exported as `MARIMO_TOKEN` in login shells and in interactive shells (the Runpod web terminal, SSH, `docker exec -it`), so an agent launched from one of those needs no further setup. A *non-interactive* shell — `docker exec <pod> bash -c '...'` — sources neither startup file, so export it yourself there:
+
+```bash
+export MARIMO_TOKEN=$(cat /home/runpod/.config/marimo/token)
+```
 
 Harnesses other than Claude Code and Codex may scan different directories; point yours at `/opt/agent-skills/marimo-pair` if it does not pick the skill up.
