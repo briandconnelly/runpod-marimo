@@ -33,7 +33,7 @@ ARG IMAGE_DESCRIPTION="Marimo notebook server for Runpod GPU pods"
 # renovate: datasource=python-version depName=python
 ARG PYTHON_VERSION=3.13.15
 # renovate: datasource=pypi depName=marimo
-ARG MARIMO_VERSION=0.23.15
+ARG MARIMO_VERSION=0.24.2
 # renovate: datasource=pypi depName=huggingface_hub
 ARG HUGGINGFACE_HUB_VERSION=1.32.0
 # renovate: datasource=pypi depName=ty
@@ -172,15 +172,13 @@ RUN install -d -o runpod -g runpod /opt/uv-python && \
 RUN su -l runpod -c "uv tool install huggingface_hub==${HUGGINGFACE_HUB_VERSION} && uv tool install ty==${TY_VERSION}"
 
 # ── Marimo uvx cache warm-up ─────────────────────────────────────────────────
-# Populate uvx's tool-env cache so the
-# `uvx --with 'mcp<2' marimo[mcp,lsp]==VER` launch in start_marimo.sh is a
-# cache hit on first boot (saves ~1-2 minutes on a cold pod). uvx keys the
-# cache on the whole requirement set, not the package spec alone, so this
-# invocation must request the same set start_marimo.sh does — the `--with`
-# cap included. See the comment above that invocation for why the cap
-# exists and when to drop it. Users who override MARIMO_VERSION at runtime
-# pay the download cost once for their new version.
-RUN su -l runpod -c "uvx --with 'mcp<2' 'marimo[mcp,lsp]==${MARIMO_VERSION}' --version"
+# Populate uvx's tool-env cache so the `uvx marimo[mcp,lsp]==VER` launch in
+# start_marimo.sh is a cache hit on first boot (saves ~1-2 minutes on a cold
+# pod). uvx keys the cache on the whole requirement set, not the package spec
+# alone, so this invocation must request the same set start_marimo.sh does.
+# Users who override MARIMO_VERSION at runtime pay the download cost once for
+# their new version.
+RUN su -l runpod -c "uvx 'marimo[mcp,lsp]==${MARIMO_VERSION}' --version"
 
 # ── Marimo config ────────────────────────────────────────────────────────────
 COPY marimo.toml /home/runpod/.config/marimo/marimo.toml
@@ -192,7 +190,7 @@ RUN chmod +x /start_marimo.sh
 
 EXPOSE 2971
 
-# /health is served 200 without authentication (verified on marimo 0.23.15),
+# /health is served 200 without authentication (verified on marimo 0.24.2),
 # so the probe works identically with and without token auth — `/` answers
 # with a 303 to the login page when a token is required. start-period is
 # 600s because a first boot against an empty persistent cache (network

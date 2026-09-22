@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Updated marimo to 0.24.2, and removed the `uvx --with 'mcp<2'` cap the 0.8.1 release added. marimo 0.24.1 moved to the mcp 2.x API and now bounds the dependency itself (`mcp>=2.0.0,<3`), so the cap is both unnecessary and unsatisfiable — leaving it in place made the resolve fail outright ([marimo#10371](https://github.com/marimo-team/marimo/issues/10371)).
+- The MCP smoke tests now assert the symbols marimo imports under mcp 2.x — `mcp.client.streamable_http.streamable_http_client`, `mcp.server.MCPServer`, and `mcp.Client` — in place of the mcp 1.x symbols (`streamablehttp_client`, `mcp.server.fastmcp.FastMCP`) that release removed.
+
 ## [0.8.1] - 2026-07-28
 
 ### Fixed

@@ -146,26 +146,29 @@ shared_tests() {
     fi
 
     section "MCP integration"
-    # Regression test for the mcp 2.0.0 break (marimo#10371). marimo's [mcp]
-    # extra declares an unbounded `mcp>=1.0.0`, and mcp 2.0.0 removed both
-    # symbols marimo 0.23.15 imports at runtime: `streamablehttp_client` was
-    # renamed and its alias dropped, and `mcp.server.fastmcp` was deleted
-    # outright. start_marimo.sh caps the resolve at `mcp<2`.
+    # Regression test for the mcp 2.0.0 break (marimo#10371). The symbols
+    # asserted here are the ones marimo imports from mcp at runtime, so they
+    # track marimo's API rather than a pinned mcp version: 0.23.x declared an
+    # unbounded `mcp>=1.0.0` while importing `streamablehttp_client` and
+    # `mcp.server.fastmcp`, both removed in mcp 2.0.0, which is why the image
+    # once capped the resolve at `mcp<2`. marimo 0.24.1+ uses the mcp 2.x API
+    # (`streamable_http_client`, `MCPServer`) and bounds the dependency itself
+    # (`mcp>=2.0.0,<3`), so the cap is gone.
     #
     # Nothing above catches this: marimo starts fine and serves /health, and
     # the failure surfaces only as an ImportError in the logs when the MCP
-    # client connects. Assert the imports rather than the pinned version, so
-    # this keeps testing the property that matters once the cap is lifted for
-    # an mcp-2-compatible marimo.
+    # client connects.
     if [[ -n "$MARIMO_PID" ]]; then
         local MARIMO_BIN MARIMO_ENV_PY
         MARIMO_BIN=$(tr '\0' '\n' < /proc/"$MARIMO_PID"/cmdline | head -1)
         MARIMO_ENV_PY="$(dirname "$(dirname "$MARIMO_BIN")")/bin/python"
         check "marimo tool env python exists" "test -x '$MARIMO_ENV_PY'"
         check "mcp streamable-http client importable" \
-            "'$MARIMO_ENV_PY' -c 'from mcp.client.streamable_http import streamablehttp_client'"
-        check "mcp FastMCP importable" \
-            "'$MARIMO_ENV_PY' -c 'from mcp.server.fastmcp import FastMCP'"
+            "'$MARIMO_ENV_PY' -c 'from mcp.client.streamable_http import streamable_http_client'"
+        check "mcp server importable" \
+            "'$MARIMO_ENV_PY' -c 'from mcp.server import MCPServer'"
+        check "mcp client importable" \
+            "'$MARIMO_ENV_PY' -c 'from mcp import Client'"
     else
         echo "  (skipped — marimo process not found)"
     fi
