@@ -35,7 +35,7 @@ ARG PYTHON_VERSION=3.13.15
 # renovate: datasource=pypi depName=marimo
 ARG MARIMO_VERSION=0.24.2
 # renovate: datasource=pypi depName=huggingface_hub
-ARG HUGGINGFACE_HUB_VERSION=1.32.0
+ARG HUGGINGFACE_HUB_VERSION=2.0.0
 # renovate: datasource=pypi depName=ty
 ARG TY_VERSION=0.0.83
 
