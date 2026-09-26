@@ -15,6 +15,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Condensed the pod-template READMEs (`README-gpu.md`, `README-cpu.md`) to fit Runpod's 5000-character template-description limit (GPU 7544 -> 4896, CPU 6805 -> 4502). No facts were dropped: sections were tightened, the GPU-package note folded into the reproducibility section, the shared-volume `HF_HOME` caveat reduced to one sentence, and a link to the repository README added for the full documentation. `README.md` keeps the long-form text.
 
+### Fixed
+
+- Renovate PRs for checksum-pinned tools (GitHub CLI, DuckDB, runpodctl) no longer freeze at the version they were opened with. CI's `checksums` job pushes a `github-actions[bot]` commit to each such branch to repair the `_SHA256` pin, and Renovate treated that unrecognised author as a human edit: it posted an "Edited/Blocked Notification" and stopped rebasing the PR onto newer releases, which is how the gh CLI and runpodctl PRs from July sat on stale versions until they were superseded by hand in 0.9.0. `gitIgnoredAuthors` in `renovate.json` now names that bot address, so Renovate keeps updating those PRs in place and the checksum job re-runs against each new version.
+
 ## [0.9.0] - 2026-09-22
 
 ### Added
