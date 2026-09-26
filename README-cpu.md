@@ -21,9 +21,9 @@ Pre-installing them would allow imports that work in the pod but leave no record
 | `MARIMO_TOKEN_PASSWORD` | Password required to access the marimo UI | _(falls back to `JUPYTER_PASSWORD`, else a generated token)_ |
 | `MARIMO_DISABLE_AUTH` | Set to `true` to disable marimo's token authentication entirely | `false` |
 
-`/workspace` is where Runpod mounts network volumes, so notebooks created there persist across pod stop/start when a volume is attached (without one, it is ephemeral).
-The `uv` sandbox cache (`UV_CACHE_DIR`) and Hugging Face hub cache (`HF_HOME`) default to `$MARIMO_CACHE_DIR/uv` and `$MARIMO_CACHE_DIR/huggingface`, so dependencies and models persist alongside the notebooks; either can be relocated on its own.
-Set `MARIMO_CACHE_DIR=/home/runpod/.cache` for ephemeral container-local caches — the image's prewarmed `uvx marimo` cache lives there, so first boot is still a cache hit.
+`/workspace` is where Runpod mounts network volumes, so notebooks created there persist across pod stop/start when a volume is attached (otherwise it is ephemeral).
+The `uv` sandbox cache (`UV_CACHE_DIR`) and Hugging Face hub cache (`HF_HOME`) default to `$MARIMO_CACHE_DIR/uv` and `$MARIMO_CACHE_DIR/huggingface`, so dependencies and models persist alongside the notebooks; either can be set on its own.
+Set `MARIMO_CACHE_DIR=/home/runpod/.cache` for ephemeral container-local caches; first boot still hits the image's prewarmed `uvx marimo` cache.
 `HF_HOME` holds your Hugging Face login token, so keep it off a volume shared between pods.
 
 ## Authentication
@@ -32,27 +32,28 @@ Runpod's web proxy does **not** authenticate requests — anyone with the pod's 
 Token authentication is therefore on by default, with the password resolved in order:
 
 1. `MARIMO_TOKEN_PASSWORD`, if set — an explicit password of your choosing.
-2. `JUPYTER_PASSWORD`, if set — Runpod auto-generates this for templates that declare it. Its value is never shown in the console, but it survives pod stop/start, so a bookmarked access URL keeps working.
-3. A random token generated at startup (rotates on every restart).
+2. `JUPYTER_PASSWORD`, if set — Runpod auto-generates this for templates that declare it. Never shown in the console, but it survives pod stop/start, so a bookmarked access URL keeps working.
+3. A random token generated at startup (new on every restart).
 
-The startup logs print a ready-to-use access URL (`.../?access_token=...`) — find it in the pod's logs in the Runpod console.
-It is also stored at `/home/runpod/.config/marimo/token` and exported as `MARIMO_TOKEN` into login and interactive shells, so agents in the pod can authenticate without setup.
+The startup logs (Runpod console) print a ready-to-use access URL (`.../?access_token=...`).
+It is also stored at `/home/runpod/.config/marimo/token` and exported as `MARIMO_TOKEN` into login and interactive shells for agents in the pod.
 
-Set `MARIMO_DISABLE_AUTH=true` to opt out and run with `--no-token`. Only do this if something else restricts access to port 2971.
+Set `MARIMO_DISABLE_AUTH=true` to opt out (`--no-token`) only if something else restricts access to port 2971.
 
 ## What is included
 
 - **marimo** with the `lsp` (autocomplete, linting, and type checking via **ty**) and `mcp` extras
-- **[marimo-pair](https://github.com/marimo-team/marimo-pair)** agent skill, so a coding agent can drive the live notebook kernel
+- **[marimo-pair](https://github.com/marimo-team/marimo-pair)** agent skill for driving the live notebook kernel
 - **huggingface_hub**, **GitHub CLI** (`gh`), **runpodctl**, and **DuckDB** CLIs
+- **[pi](https://pi.dev)** and **[opencode](https://opencode.ai)** coding-agent CLIs
 - Standard utilities: `git`, `curl`, `wget`, `jq`, `tmux`
 
 ## Pairing with a coding agent
 
-The preinstalled [marimo-pair](https://github.com/marimo-team/marimo-pair) skill lets a coding agent run Python in the *same kernel you are using* and commit durable cell changes, instead of editing the file behind the running kernel's back.
-It lives at `/opt/agent-skills/marimo-pair`, linked into `~/.claude/skills/` and `~/.agents/skills/` for both the `root` and `runpod` users.
+The preinstalled [pi](https://pi.dev) and [opencode](https://opencode.ai) agents pick up the bundled [marimo-pair](https://github.com/marimo-team/marimo-pair) skill, which runs Python in the *same kernel you are using* and commits durable cell changes instead of editing the file behind the running kernel's back.
+It lives at `/opt/agent-skills/marimo-pair`, linked into `~/.claude/skills/` and `~/.agents/skills/` for `root` and `runpod`, so an agent you bring finds it too.
 
-Bring your own agent CLI (none is preinstalled) and point it at `http://localhost:2971` explicitly — marimo's auto-discovery only registers servers started with `--no-token`.
+Set your provider's API key as a pod env var (e.g. `ANTHROPIC_API_KEY`) or log in inside the agent, then point it at `http://localhost:2971` explicitly — marimo's auto-discovery only registers servers started with `--no-token`.
 An agent launched from a login or interactive shell picks up `MARIMO_TOKEN` automatically; in a non-interactive shell, export it yourself:
 
 ```bash

@@ -107,6 +107,63 @@ RUN curl -fsSL "https://github.com/runpod/runpodctl/releases/download/${RUNPODCT
     echo "${RUNPODCTL_SHA256}  /usr/local/bin/runpodctl" | sha256sum -c && \
     chmod +x /usr/local/bin/runpodctl
 
+# ── Coding agents: pi and opencode ───────────────────────────────────────────
+# Both ship as pinned, checksum-verified standalone Linux builds, like every
+# other tool above. The npm route is not an option: the `nodejs` apt package
+# has no npm and is Node 18, while pi's npm package needs Node >= 22.19, so
+# npm would drag in a second, unpinned Node toolchain for nothing — both
+# projects publish Bun-compiled binaries that need no Node at all.
+#
+# Neither binary is a Python package; nothing here is importable from a
+# notebook, so the no-domain-packages rule is untouched. Both agents scan
+# ~/.agents/skills, so the marimo-pair skill linked below is discovered by
+# either one with no further wiring.
+#
+# Neither release tarball carries a LICENSE (both projects are MIT), so each
+# upstream LICENSE is fetched from the same pinned tag as a second
+# checksum-verified download. scripts/sync-checksums.sh pairs a
+# *_LICENSE_SHA256 ARG with the tool's own *_VERSION ARG for that purpose.
+
+# pi (https://pi.dev) resolves themes, assets and a wasm module relative to
+# its real path, so the whole extracted tree stays together under /opt/pi and
+# a tiny launcher goes on PATH — the same shape as pi's own installer, which
+# execs the release binary from a managed directory.
+# renovate: datasource=github-releases depName=earendil-works/pi
+ARG PI_VERSION=v0.87.1
+ARG PI_SHA256=80d78dd62d50049a006b981d994c61255bcc10e730b0c278d4ea0a755909764c
+ARG PI_LICENSE_SHA256=0457f5bcec3b3b211605dfb5d1a49042fd638f3686a410fe099c24a25af13c48
+# hadolint ignore=SC2016  # the "$@" must reach the launcher unexpanded
+RUN curl -fsSL "https://github.com/earendil-works/pi/releases/download/${PI_VERSION}/pi-linux-x64.tar.gz" \
+        -o /tmp/pi.tar.gz && \
+    echo "${PI_SHA256}  /tmp/pi.tar.gz" | sha256sum -c && \
+    tar -xzf /tmp/pi.tar.gz -C /opt && \
+    rm /tmp/pi.tar.gz && \
+    test -x /opt/pi/pi && \
+    mkdir -p /usr/share/licenses/pi && \
+    curl -fsSL "https://raw.githubusercontent.com/earendil-works/pi/${PI_VERSION}/LICENSE" \
+        -o /usr/share/licenses/pi/LICENSE && \
+    echo "${PI_LICENSE_SHA256}  /usr/share/licenses/pi/LICENSE" | sha256sum -c && \
+    printf '#!/bin/sh\nexec /opt/pi/pi "$@"\n' > /usr/local/bin/pi && \
+    chmod 755 /usr/local/bin/pi && \
+    chmod -R a+rX /opt/pi /usr/share/licenses/pi
+
+# opencode (https://opencode.ai) is a single self-contained binary.
+# renovate: datasource=github-releases depName=anomalyco/opencode
+ARG OPENCODE_VERSION=v1.18.32
+ARG OPENCODE_SHA256=3046e0404fdc60fb80307e7a47824ba07477364178a4d09baa8548496dd6d43b
+ARG OPENCODE_LICENSE_SHA256=625f0f619133f89bbbb2abe37369613dfa1885eba1e50d02170deb62bb42cb6b
+RUN curl -fsSL "https://github.com/anomalyco/opencode/releases/download/${OPENCODE_VERSION}/opencode-linux-x64.tar.gz" \
+        -o /tmp/opencode.tar.gz && \
+    echo "${OPENCODE_SHA256}  /tmp/opencode.tar.gz" | sha256sum -c && \
+    tar -xzf /tmp/opencode.tar.gz -C /usr/local/bin opencode && \
+    chmod 755 /usr/local/bin/opencode && \
+    rm /tmp/opencode.tar.gz && \
+    mkdir -p /usr/share/licenses/opencode && \
+    curl -fsSL "https://raw.githubusercontent.com/anomalyco/opencode/${OPENCODE_VERSION}/LICENSE" \
+        -o /usr/share/licenses/opencode/LICENSE && \
+    echo "${OPENCODE_LICENSE_SHA256}  /usr/share/licenses/opencode/LICENSE" | sha256sum -c && \
+    chmod -R a+rX /usr/share/licenses/opencode
+
 # ── marimo-pair skill ────────────────────────────────────────────────────────
 # The marimo-pair agent skill (https://github.com/marimo-team/marimo-pair)
 # lets a coding agent drive the live marimo kernel instead of editing the

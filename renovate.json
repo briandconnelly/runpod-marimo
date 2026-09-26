@@ -16,7 +16,7 @@
   "packageRules": [
     {
       "description": "Note that CI repairs the SHA256 checksum these bumps leave stale",
-      "matchDepNames": ["duckdb/duckdb", "runpod/runpodctl", "cli/cli"],
+      "matchDepNames": ["duckdb/duckdb", "runpod/runpodctl", "cli/cli", "earendil-works/pi", "anomalyco/opencode"],
       "prBodyNotes": [
         "This package is verified against a pinned `_SHA256` ARG in the Dockerfile, which Renovate cannot recompute. The `checksums` job in CI recomputes it from this PR's version and commits the fix to this branch, so no manual step is needed. If that job fails instead, read its log before touching the checksum by hand: it refuses to auto-update a pin whose version did not change, because that means the bytes behind an already-released tag moved."
       ]
