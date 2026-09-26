@@ -76,13 +76,19 @@ Set `MARIMO_DISABLE_AUTH=true` to opt out and run with `--no-token`. Only do thi
 - **huggingface_hub** CLI for downloading models and datasets
 - **GitHub CLI** (`gh`) and **runpodctl** for interacting with Runpod and GitHub from the terminal
 - **DuckDB** CLI for querying files from the terminal
+- **[pi](https://pi.dev)** and **[opencode](https://opencode.ai)** coding-agent CLIs, as pinned standalone binaries
 - **[marimo-pair](https://github.com/marimo-team/marimo-pair)** agent skill, preinstalled so a coding agent can drive the live notebook kernel
 - Standard utilities: `git`, `curl`, `wget`, `jq`, `tmux`
 - **nvtop** for GPU monitoring (GPU variant only)
 
 ## Pairing with a coding agent
 
-The [marimo-pair](https://github.com/marimo-team/marimo-pair) skill ships preinstalled.
+Two coding-agent CLIs ship preinstalled: [pi](https://pi.dev) and [opencode](https://opencode.ai).
+Each is a pinned, checksum-verified standalone release binary — no Node toolchain is involved — and neither adds anything importable from a notebook.
+pi lives under `/opt/pi` behind a launcher at `/usr/local/bin/pi`; opencode is `/usr/local/bin/opencode`.
+Both need an API key for your model provider: set it as a pod environment variable (for example `ANTHROPIC_API_KEY`), which the image forwards into shell environments, or authenticate inside the agent (`/login` in pi, `/connect` in opencode).
+
+The [marimo-pair](https://github.com/marimo-team/marimo-pair) skill also ships preinstalled.
 It lets a coding agent run Python in the *same kernel you are using* and commit durable cell changes, instead of editing the notebook file behind the running kernel's back.
 
 The skill is installed at `/opt/agent-skills/marimo-pair` and linked into the locations agent harnesses scan, for both the `root` and `runpod` users:
@@ -90,7 +96,9 @@ The skill is installed at `/opt/agent-skills/marimo-pair` and linked into the lo
 - `~/.claude/skills/marimo-pair` — Claude Code
 - `~/.agents/skills/marimo-pair` — the cross-client [Agent Skills](https://agentskills.io) convention
 
-Bring your own agent CLI (none is preinstalled), open a notebook in the browser, and point the agent at the local server:
+pi and opencode both scan `~/.agents/skills`, so they pick the skill up with no configuration; the same links serve a Claude Code or Codex you bring yourself.
+
+Open a notebook in the browser, launch the agent from a pod terminal (the Runpod web terminal, SSH, or `docker exec -it`), and point it at the local server:
 
 ```
 http://localhost:2971

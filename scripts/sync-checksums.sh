@@ -23,6 +23,12 @@
 # Dockerfile is paired with its `ARG <PREFIX>_VERSION=`, and the download URL
 # is read back out of the RUN line that references that version, so adding a
 # fourth checksummed tool needs no change here.
+#
+# One convention on top of that: `ARG <PREFIX>_LICENSE_SHA256=` pins a
+# tool's upstream LICENSE fetched from the same tag, for tools whose release
+# tarball does not carry one. It shares `<PREFIX>_VERSION` with the tool, and
+# its URL is the one on that version's RUN lines that ends in /LICENSE; the
+# tool's own URL is the one that does not.
 
 set -Eeuo pipefail
 
@@ -59,8 +65,16 @@ checked=0
 mutated=0
 
 while read -r prefix; do
-    ver_arg="${prefix}_VERSION"
     sha_arg="${prefix}_SHA256"
+    # A *_LICENSE pin rides on its tool's version and picks the /LICENSE
+    # URL; the tool itself picks the other one.
+    if [[ $prefix == *_LICENSE ]]; then
+        ver_arg="${prefix%_LICENSE}_VERSION"
+        url_filter=(grep -E '/LICENSE$')
+    else
+        ver_arg="${prefix}_VERSION"
+        url_filter=(grep -Ev '/LICENSE$')
+    fi
 
     version=$(arg_value "$ver_arg")
     pinned=$(arg_value "$sha_arg")
@@ -72,7 +86,7 @@ while read -r prefix; do
 
     # Recover the URL template from the RUN line that consumes this version,
     # rather than duplicating it here where it could silently drift.
-    url_tpl=$(grep -F "\${${ver_arg}}" Dockerfile | grep -oE 'https://[^"]+' | head -1)
+    url_tpl=$(grep -F "\${${ver_arg}}" Dockerfile | grep -oE 'https://[^"]+' | "${url_filter[@]}" | head -1)
     if [[ -z $url_tpl ]]; then
         echo "error: no download URL in Dockerfile referencing \${$ver_arg}" >&2
         exit 1

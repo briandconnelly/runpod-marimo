@@ -35,7 +35,7 @@ shared_tests() {
 
     section "System packages"
     local cmd
-    for cmd in uv uvx gh duckdb runpodctl jq git curl wget tmux node ssh; do
+    for cmd in uv uvx gh duckdb runpodctl pi opencode jq git curl wget tmux node ssh; do
         check "$cmd on PATH" "command -v $cmd"
     done
     check "sshd binary present"     "test -x /usr/sbin/sshd"
@@ -269,6 +269,30 @@ shared_tests() {
         check "execute-code.sh is rejected without a token" \
             "grep -qF 'Failed to connect' $PAIR_OUT_NOTOKEN"
     fi
+
+    section "Coding agents"
+    # pi and opencode are pinned standalone release binaries. Both are
+    # Bun-compiled; pi's loads themes, assets and a wasm module from
+    # alongside the real binary, so it lives under /opt/pi behind a
+    # launcher on PATH (the same shape as pi's own installer) rather than
+    # being copied into /usr/local/bin on its own. `--version` is the
+    # cheapest probe that actually executes each binary, which a bare
+    # `command -v` cannot — a tarball with the wrong architecture or a
+    # missing dynamic library would still be "on PATH".
+    check "pi launcher is a script, not the binary" "grep -q '^exec /opt/pi/pi' /usr/local/bin/pi"
+    check "pi binary present under /opt/pi"         "test -x /opt/pi/pi"
+    check "pi runtime assets present"               "test -r /opt/pi/photon_rs_bg.wasm && test -d /opt/pi/theme"
+    check "pi LICENSE shipped"                      "test -r /usr/share/licenses/pi/LICENSE"
+    check "opencode LICENSE shipped"                "test -r /usr/share/licenses/opencode/LICENSE"
+    # Both identities matter, as with the skill links above: docker exec
+    # and the console give root, marimo's terminal gives runpod.
+    local agent
+    for agent in pi opencode; do
+        check "$agent --version runs as root" \
+            "$agent --version 2>/dev/null | grep -Eq '[0-9]+\.[0-9]+\.[0-9]+'"
+        check "$agent --version runs as runpod" \
+            "su -l runpod -c '$agent --version' 2>/dev/null | grep -Eq '[0-9]+\.[0-9]+\.[0-9]+'"
+    done
 
     section "Env forwarding"
     local RE_ENV=/etc/profile.d/runpod-env.sh
