@@ -78,7 +78,7 @@ COPY --from=uv-dist /uv /uvx /usr/local/bin/
 
 # ── GitHub CLI ───────────────────────────────────────────────────────────────
 # renovate: datasource=github-releases depName=cli/cli
-ARG GH_VERSION=v2.101.0
+ARG GH_VERSION=v2.102.0
 ARG GH_SHA256=9bca2d1c16825f109907a23307628a2f0698fbf99662b73a5cf0b020293072b8
 RUN curl -fsSL "https://github.com/cli/cli/releases/download/${GH_VERSION}/gh_${GH_VERSION#v}_linux_amd64.tar.gz" \
         -o /tmp/gh.tar.gz && \
