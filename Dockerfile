@@ -130,7 +130,7 @@ RUN curl -fsSL "https://github.com/runpod/runpodctl/releases/download/${RUNPODCT
 # execs the release binary from a managed directory.
 # renovate: datasource=github-releases depName=earendil-works/pi
 ARG PI_VERSION=v0.99.2
-ARG PI_SHA256=80d78dd62d50049a006b981d994c61255bcc10e730b0c278d4ea0a755909764c
+ARG PI_SHA256=f998cc1232733eab240526d74acdce429d650b9e01f5804636d7aa96eb629846
 ARG PI_LICENSE_SHA256=0457f5bcec3b3b211605dfb5d1a49042fd638f3686a410fe099c24a25af13c48
 # hadolint ignore=SC2016  # the "$@" must reach the launcher unexpanded
 RUN curl -fsSL "https://github.com/earendil-works/pi/releases/download/${PI_VERSION}/pi-linux-x64.tar.gz" \
