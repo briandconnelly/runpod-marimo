@@ -149,7 +149,7 @@ RUN curl -fsSL "https://github.com/earendil-works/pi/releases/download/${PI_VERS
 
 # opencode (https://opencode.ai) is a single self-contained binary.
 # renovate: datasource=github-releases depName=anomalyco/opencode
-ARG OPENCODE_VERSION=v1.18.32
+ARG OPENCODE_VERSION=v1.18.35
 ARG OPENCODE_SHA256=3046e0404fdc60fb80307e7a47824ba07477364178a4d09baa8548496dd6d43b
 ARG OPENCODE_LICENSE_SHA256=625f0f619133f89bbbb2abe37369613dfa1885eba1e50d02170deb62bb42cb6b
 RUN curl -fsSL "https://github.com/anomalyco/opencode/releases/download/${OPENCODE_VERSION}/opencode-linux-x64.tar.gz" \
