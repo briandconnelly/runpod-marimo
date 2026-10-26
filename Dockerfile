@@ -129,7 +129,7 @@ RUN curl -fsSL "https://github.com/runpod/runpodctl/releases/download/${RUNPODCT
 # a tiny launcher goes on PATH — the same shape as pi's own installer, which
 # execs the release binary from a managed directory.
 # renovate: datasource=github-releases depName=earendil-works/pi
-ARG PI_VERSION=v0.87.1
+ARG PI_VERSION=v0.99.2
 ARG PI_SHA256=80d78dd62d50049a006b981d994c61255bcc10e730b0c278d4ea0a755909764c
 ARG PI_LICENSE_SHA256=0457f5bcec3b3b211605dfb5d1a49042fd638f3686a410fe099c24a25af13c48
 # hadolint ignore=SC2016  # the "$@" must reach the launcher unexpanded
