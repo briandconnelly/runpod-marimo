@@ -29,7 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Updated Python to 3.13.18.
 - Updated uv to 0.13.7.
 - Updated huggingface_hub to 2.4.0 (major version).
-- Updated ty to 0.0.97.
+- Updated ty to 0.0.98.
 - Updated GitHub CLI to v2.103.3.
 - Updated DuckDB CLI to v2.0.0 (major version). DuckDB 2.0 publishes the Linux CLI as `duckdb-cli-linux-amd64.tar.gz` instead of `duckdb_cli-linux-amd64.zip`, so the install step now extracts a tarball.
 - Updated runpodctl to v3.0.1 (major version).
