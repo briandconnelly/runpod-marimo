@@ -37,7 +37,7 @@ ARG MARIMO_VERSION=0.25.2
 # renovate: datasource=pypi depName=huggingface_hub
 ARG HUGGINGFACE_HUB_VERSION=2.4.0
 # renovate: datasource=pypi depName=ty
-ARG TY_VERSION=0.0.97
+ARG TY_VERSION=0.0.98
 
 LABEL org.opencontainers.image.title="runpod-marimo" \
       org.opencontainers.image.description="${IMAGE_DESCRIPTION}" \
