@@ -361,5 +361,15 @@ MARIMO_ARGS="edit --host 0.0.0.0 --port 2971 ${AUTH_FLAG} --sandbox ${WORKSPACE_
 # Dockerfile: uvx keys its cached tool env on the full set, so adding a
 # `--with` on one side silently turns first boot into a fresh download
 # instead of a cache hit.
+#
+# Process tree and shutdown. `exec su` makes su PID 1; util-linux su
+# forwards SIGTERM/SIGINT to its child. That child is the `-c` shell, and
+# a non-interactive bash receiving SIGTERM simply dies, orphaning whatever
+# it was waiting on — so without the inner `exec`, a pod stop would kill
+# the shell and leave marimo running until Docker's SIGKILL deadline,
+# skipping marimo's own shutdown (kernel teardown, autosave). With it,
+# bash execs uvx and uvx execs the tool binary on Unix, so the tree is
+# exactly su(1) -> marimo and the forwarded signal reaches marimo.
+# tests/common.sh asserts that shape.
 MARIMO_SPEC_Q=$(printf '%q' "marimo[mcp,lsp]==${MARIMO_VERSION}")
-exec su -l runpod -c "cd ${WORKSPACE_Q} && uvx ${MARIMO_SPEC_Q} $MARIMO_ARGS"
+exec su -l runpod -c "cd ${WORKSPACE_Q} && exec uvx ${MARIMO_SPEC_Q} $MARIMO_ARGS"
