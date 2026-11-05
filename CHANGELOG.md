@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- The pod-template READMEs (`README-gpu.md`, `README-cpu.md`) now link to the issue tracker for bug reports and feature requests alongside the repository link (#42). To keep the GPU README under the 5000-character cap, the host-requirements sentence and the `MARIMO_DISABLE_AUTH` description were reworded more tersely; no facts were dropped.
 - Condensed the pod-template READMEs (`README-gpu.md`, `README-cpu.md`) to fit Runpod's 5000-character template-description limit (GPU 7544 -> 4896, CPU 6805 -> 4502). No facts were dropped: sections were tightened, the GPU-package note folded into the reproducibility section, the shared-volume `HF_HOME` caveat reduced to one sentence, and a link to the repository README added for the full documentation. `README.md` keeps the long-form text. Tightened again to make room for the pi/opencode entries (GPU now 4978 bytes); the "bring your own agent CLI" wording is gone since two now ship in the image.
 - Updated marimo to 0.25.2.
 - Updated Python to 3.13.18.

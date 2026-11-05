@@ -2,7 +2,7 @@
 
 A Docker image that runs [marimo](https://marimo.io) as a notebook server on Runpod CPU pods, served on port **2971** via Runpod's web proxy.
 A GPU variant is published for CUDA-enabled pods — use a tag without the `-cpu` suffix (e.g., `0.9.0`).
-Full docs: [github.com/briandconnelly/runpod-marimo](https://github.com/briandconnelly/runpod-marimo)
+Source: [GitHub](https://github.com/briandconnelly/runpod-marimo) · [Report a bug or request a feature](https://github.com/briandconnelly/runpod-marimo/issues)
 
 ## Reproducible notebooks by design
 
@@ -19,7 +19,7 @@ Pre-installing them would allow imports that work in the pod but leave no record
 | `MARIMO_WORKSPACE` | Path to open in marimo's file browser | `/workspace` |
 | `MARIMO_CACHE_DIR` | Parent directory for uv and Hugging Face caches | `$MARIMO_WORKSPACE/.cache` |
 | `MARIMO_TOKEN_PASSWORD` | Password required to access the marimo UI | _(falls back to `JUPYTER_PASSWORD`, else a generated token)_ |
-| `MARIMO_DISABLE_AUTH` | Set to `true` to disable marimo's token authentication entirely | `false` |
+| `MARIMO_DISABLE_AUTH` | Set to `true` to disable token authentication | `false` |
 
 `/workspace` is where Runpod mounts network volumes, so notebooks created there persist across pod stop/start when a volume is attached (otherwise it is ephemeral).
 The `uv` sandbox cache (`UV_CACHE_DIR`) and Hugging Face hub cache (`HF_HOME`) default to `$MARIMO_CACHE_DIR/uv` and `$MARIMO_CACHE_DIR/huggingface`, so dependencies and models persist alongside the notebooks; either can be set on its own.
