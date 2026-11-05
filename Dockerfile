@@ -53,6 +53,9 @@ ENV PYTHONUNBUFFERED=1
 # jq is load-bearing: start_marimo.sh uses it to URL-encode the access
 # token for the proxy URL printed to the pod logs (and it remains a
 # general-purpose interactive tool).
+# libatomic1 is the one shared library the upstream Node binary (below)
+# needs that the Ubuntu base image does not ship; everything else it links
+# (libstdc++, libgcc_s, libm, libdl, libpthread) is already present.
 RUN apt-get update --yes && \
     DEBIAN_FRONTEND=noninteractive apt-get install --yes --no-install-recommends \
         ca-certificates \
@@ -62,6 +65,7 @@ RUN apt-get update --yes && \
         sudo \
         jq \
         tmux \
+        libatomic1 \
         openssh-server \
         unzip \
     && if [ "${VARIANT}" = "gpu" ]; then \
