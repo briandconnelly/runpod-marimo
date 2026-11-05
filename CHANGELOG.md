@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Pods with volumes that deny ownership changes now start on the first boot when their workspace and cache directories are writable by `runpod` (#115). Failed ownership changes warn and defer to the permission probes, so unusable directories fail immediately with a clear error instead of causing repeated restarts as each cache directory is created.
+
 ## [0.10.0] - 2026-11-05
 
 ### Added

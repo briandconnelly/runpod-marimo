@@ -113,9 +113,11 @@ _validate_path_var() {
 [[ -n "${UV_CACHE_DIR:-}" ]] && _validate_path_var UV_CACHE_DIR "$UV_CACHE_DIR"
 [[ -n "${HF_HOME:-}" ]] && _validate_path_var HF_HOME "$HF_HOME"
 
-# Ensure a directory exists and is owned by the runpod user. Only chowns
-# directories we created on this boot, to avoid changing ownership of
-# a pre-existing user-supplied path (e.g. a populated volume subdir).
+# Ensure a directory exists and try to give the runpod user ownership.
+# A denied chown only warns: the probes below decide whether runpod can
+# use the paths. Only chowns directories we created on this boot, to avoid
+# changing ownership of a pre-existing user-supplied path (e.g. a populated
+# volume subdir).
 # Special case: /workspace itself is always chown'd because Runpod mounts
 # network volumes there root-owned, and marimo (unprivileged) must be
 # able to write at the top level.
@@ -133,8 +135,7 @@ _ensure_runpod_dir() {
             exit 1
         }
         chown runpod:runpod "$dir" || {
-            echo "Error: failed to chown '$dir' to runpod." >&2
-            exit 1
+            echo "Warning: could not chown '$dir' to runpod; checking directory permissions below." >&2
         }
     fi
 }
@@ -155,15 +156,12 @@ _ensure_runpod_dir "$UV_CACHE_DIR"
 _ensure_runpod_dir "$HF_HOME"
 
 # Probe that the workspace and cache directories are actually usable
-# by the runpod user before launching marimo. The dir-setup above
-# should guarantee this for paths we created, but _ensure_runpod_dir
-# intentionally leaves ownership alone on pre-existing user-supplied
-# paths — so a user-provided MARIMO_CACHE_DIR / UV_CACHE_DIR / HF_HOME
-# pointing at a root-owned or ACL-restricted dir would slip through
-# silently and fail later when marimo/uv tries to write. Same goes for
-# a network volume with restrictive ACLs or a read-only mount. Each
-# failure mode produces a specific error here instead of a cryptic
-# cache/notebook-save failure after marimo is already running.
+# by the runpod user before launching marimo, even if chown was denied
+# or ownership was left alone on a pre-existing user-supplied path.
+# Restrictive permissions, ACLs or read-only mounts produce a specific
+# error on the first boot instead of a cryptic cache/notebook-save failure
+# after marimo is already running. CACHE_ROOT itself only needs traversal
+# when the caches live under it; probing those children covers that too.
 # Directories need both the write bit and the execute (search) bit
 # for file creation, so check both.
 _probe_runpod_writable() {
