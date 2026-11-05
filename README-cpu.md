@@ -40,6 +40,8 @@ It is also stored at `/home/runpod/.config/marimo/token` and exported as `MARIMO
 
 Set `MARIMO_DISABLE_AUTH=true` to opt out (`--no-token`) only if something else restricts access to port 2971.
 
+marimo runs as `runpod`, but that is hygiene, not a sandbox: `runpod` has passwordless `sudo apt-get` (root-equivalent) and console/SSH shells are root.
+
 ## What is included
 
 - **marimo** with the `lsp` (autocomplete, linting, and type checking via **ty**) and `mcp` extras

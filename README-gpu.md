@@ -6,7 +6,7 @@ Source: [GitHub](https://github.com/briandconnelly/runpod-marimo) · [Report a b
 
 ## Host requirements
 
-Requires an NVIDIA driver supporting CUDA 12.5+ (Linux driver >= 555.42.06) — on an older driver the container refuses to start with `unsatisfied condition: cuda>=12.5`.
+Requires an NVIDIA driver supporting CUDA 12.9 (Linux driver >= 575), or a 535/550/560/565/570-series driver via CUDA forward compatibility — otherwise the container refuses to start with `unsatisfied condition: cuda>=12.9`.
 
 ## Reproducible notebooks by design
 
@@ -44,6 +44,8 @@ It is also stored at `/home/runpod/.config/marimo/token` and exported as `MARIMO
 
 Set `MARIMO_DISABLE_AUTH=true` to opt out (`--no-token`) only if something else restricts access to port 2971.
 
+marimo runs as `runpod`, but that is hygiene, not a sandbox: `runpod` has passwordless `sudo apt-get` (root-equivalent) and console/SSH shells are root.
+
 ## What is included
 
 - **CUDA runtime** — built on `nvidia/cuda:*-runtime-ubuntu24.04`, so `nvidia-smi` and the CUDA libraries work out of the box
@@ -56,12 +58,6 @@ Set `MARIMO_DISABLE_AUTH=true` to opt out (`--no-token`) only if something else 
 
 ## Pairing with a coding agent
 
-The preinstalled [pi](https://pi.dev) and [opencode](https://opencode.ai) agents pick up the bundled [marimo-pair](https://github.com/marimo-team/marimo-pair) skill, which runs Python in the *same kernel you are using* and commits durable cell changes instead of editing the file behind the running kernel's back.
-It lives at `/opt/agent-skills/marimo-pair`, linked into `~/.claude/skills/` and `~/.agents/skills/` for `root` and `runpod`, so an agent you bring finds it too.
-
-Set your provider's API key as a pod env var (e.g. `ANTHROPIC_API_KEY`) or log in inside the agent, then point it at `http://localhost:2971` explicitly — marimo's auto-discovery only registers servers started with `--no-token`.
-An agent launched from a login or interactive shell picks up `MARIMO_TOKEN` automatically; in a non-interactive shell, export it yourself:
-
-```bash
-export MARIMO_TOKEN=$(cat /home/runpod/.config/marimo/token)
-```
+The preinstalled [pi](https://pi.dev) and [opencode](https://opencode.ai) agents pick up the bundled [marimo-pair](https://github.com/marimo-team/marimo-pair) skill, which runs Python in the *same kernel you are using* instead of editing the file behind the running kernel's back; it is also linked into `~/.claude/skills/` and `~/.agents/skills/` for any agent you bring.
+Set your provider's API key as a pod env var (e.g. `ANTHROPIC_API_KEY`), point the agent at `http://localhost:2971` explicitly, and it authenticates with the exported `MARIMO_TOKEN`.
+Non-interactive shells and other details are in the [repository README](https://github.com/briandconnelly/runpod-marimo#pairing-with-a-coding-agent).
