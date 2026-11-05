@@ -21,7 +21,7 @@ echo "variant: cpu"
 shared_tests
 
 section "CPU variant"
-check "nvtop absent"     "! command -v nvtop"
-check "CUDA libs absent" "! ldconfig -p | grep -qi libcuda"
+check "nvtop absent"     not command -v nvtop
+check "CUDA libs absent" not output_has -i libcuda ldconfig -p
 
 summary

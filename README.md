@@ -14,6 +14,9 @@ The image is published in two variants from a single Dockerfile:
 
 Bare version tags (without a `-gpu` or `-cpu` suffix) resolve to the GPU variant.
 
+The GPU variant requires an NVIDIA driver supporting CUDA 12.9 (Linux driver >= 575), or a 535/550/560/565/570-series driver via CUDA forward compatibility.
+On an older driver the container refuses to start with `unsatisfied condition: cuda>=12.9`.
+
 The [GPU](README-gpu.md) and [CPU](README-cpu.md) variants each have a dedicated README tailored for Runpod's pod template page.
 
 ## Reproducible notebooks by design
@@ -67,12 +70,21 @@ The token is passed to marimo via `--token-password-file`, so it does not appear
 
 Set `MARIMO_DISABLE_AUTH=true` to opt out and run with `--no-token`. Only do this if something else restricts access to port 2971.
 
+### Users and privileges
+
+marimo runs as the unprivileged `runpod` user; the Runpod console, SSH and `docker exec` give a root shell.
+Treat the separate user as hygiene, not as a security boundary: `runpod` has passwordless `sudo` for `apt-get` and `apt` so packages can be installed from the marimo terminal, and apt is root-equivalent by design (maintainer scripts run as root, and `apt-get -o APT::Update::Pre-Invoke=<cmd>` runs any command as root).
+Anything running as `runpod` — every notebook cell — can therefore become root.
+What the separate user does provide is unprivileged defaults: files created by notebooks are not root-owned, a mistake inside a cell cannot take out system directories, and per-user caches live in a predictable place.
+The pod is single-tenant, so this matches the access the console already grants; the token file's `0600` mode protects against accidental reads, not against a hostile notebook.
+
 > **Environment variable forwarding:** all environment variables set on the pod — including API keys and other credentials — are forwarded into the marimo and SSH login shell environments so that notebook code can reach them.
 > Be aware that any secret set on the pod is accessible from notebook code.
 
 ## What is included
 
 - **marimo** with `lsp` (in-editor autocomplete, linting, and type checking via **ty**) and `mcp` extras
+- **Node.js** (current LTS, `node` binary only — no npm), required by marimo's language-server bridge; installed from the upstream release tarball rather than Ubuntu's end-of-life Node 18 package
 - **huggingface_hub** CLI for downloading models and datasets
 - **GitHub CLI** (`gh`) and **runpodctl** for interacting with Runpod and GitHub from the terminal
 - **DuckDB** CLI for querying files from the terminal
