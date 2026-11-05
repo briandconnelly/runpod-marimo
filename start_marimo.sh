@@ -329,8 +329,9 @@ MARIMO_ARGS="edit --host 0.0.0.0 --port 2971 ${AUTH_FLAG} --sandbox ${WORKSPACE_
 
 # MARIMO_VERSION is set at build time (Dockerfile ARG → ENV → /etc/profile.d/)
 # and pins the exact marimo release so the image is deterministic.
-# uvx creates a clean isolated environment on first launch and reuses the
-# cached environment on subsequent starts.
+# uvx reuses the image's prewarmed environment when MARIMO_VERSION is the
+# build-time version (see "Prewarmed launch" below), and otherwise creates
+# one on first launch and reuses it on subsequent starts.
 # Pre-escape the full package spec: `printf %q` protects both the version
 # value and the `[mcp,lsp]` glob characters from re-expansion by the su -l
 # shell, avoiding command injection through MARIMO_VERSION and spurious
@@ -373,5 +374,28 @@ MARIMO_ARGS="edit --host 0.0.0.0 --port 2971 ${AUTH_FLAG} --sandbox ${WORKSPACE_
 # the child precisely for this PID-1/Docker case. So the tree is
 # su(1) -> uv -> marimo with every link forwarding, and the shell — the
 # one non-forwarding link — is gone. tests/common.sh asserts that shape.
+#
+# Prewarmed launch (#50). The image prewarms marimo into
+# /home/runpod/.cache/uv, but UV_CACHE_DIR defaults to the workspace volume,
+# so a plain `uvx` on a fresh volume re-downloaded marimo from PyPI — slow on
+# a healthy pod, and a crash loop on one without network. `--cache-dir`
+# points only this uvx invocation at the prewarmed cache: uv does not
+# rewrite UV_CACHE_DIR for the child, so marimo and its --sandbox `uv`
+# subprocesses still inherit the volume cache exported above. Nothing is
+# copied into the volume, so its cache is never modified behind uv's back.
+# The flag is applied only when MARIMO_VERSION is the version the image
+# prewarmed; a runtime override resolves into UV_CACHE_DIR as before, where
+# it persists on the volume.
+UVX_CACHE_ARG=""
+PREWARMED_VERSION=""
+if [[ -r /usr/local/share/runpod-marimo/prewarmed-marimo-version ]]; then
+    IFS= read -r PREWARMED_VERSION < /usr/local/share/runpod-marimo/prewarmed-marimo-version || true
+fi
+if [[ -n "$PREWARMED_VERSION" && "$PREWARMED_VERSION" == "$MARIMO_VERSION" ]]; then
+    echo "Launching marimo ${MARIMO_VERSION} from the image's prewarmed uv cache."
+    UVX_CACHE_ARG="--cache-dir /home/runpod/.cache/uv"
+else
+    echo "MARIMO_VERSION=${MARIMO_VERSION} differs from the prewarmed ${PREWARMED_VERSION:-<none>}; uvx will download it into ${UV_CACHE_DIR}."
+fi
 MARIMO_SPEC_Q=$(printf '%q' "marimo[mcp,lsp]==${MARIMO_VERSION}")
-exec su -l runpod -c "cd ${WORKSPACE_Q} && exec uvx ${MARIMO_SPEC_Q} $MARIMO_ARGS"
+exec su -l runpod -c "cd ${WORKSPACE_Q} && exec uvx ${UVX_CACHE_ARG} ${MARIMO_SPEC_Q} $MARIMO_ARGS"
