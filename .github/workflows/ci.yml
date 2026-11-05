@@ -219,7 +219,13 @@ jobs:
             docker run -d --name marimo-ci "$@" \
               -v "$(pwd)/tests:/tests:ro" \
               runpod-marimo:smoke-test
-            docker exec marimo-ci bash /tests/test-cpu.sh
+            # A suite that dies with the container (exit 137) otherwise
+            # leaves no trace of why marimo stopped.
+            docker exec marimo-ci bash /tests/test-cpu.sh || {
+              docker inspect --format 'container: running={{.State.Running}} exit={{.State.ExitCode}} oomkilled={{.State.OOMKilled}}' marimo-ci
+              echo "--- docker logs marimo-ci ---"; docker logs marimo-ci 2>&1 | tail -n 100
+              exit 1
+            }
             if [[ "${EXPECT_CHOWN_WARNINGS:-false}" == true ]]; then
               docker logs marimo-ci > "$RUNNER_TEMP/chown.log" 2>&1
               for dir in /workspace /workspace/.cache /workspace/.cache/uv /workspace/.cache/huggingface; do
@@ -249,7 +255,8 @@ jobs:
           # #50: the default cache root is <workspace>/.cache, so an empty
           # /workspace stands in for a freshly attached network volume. With
           # no network at all, marimo must still start from the image's
-          # prewarmed cache rather than re-downloading into the empty one.
+          # prewarmed cache. #116: the suite also requires a seed marker and
+          # builds a notebook sandbox offline from the persistent cache.
           run_suite_raw "first boot on an empty persistent cache, no network" \
             --network none
           # #115: dropping CHOWN produces real EPERM errors. umask 000

@@ -43,6 +43,7 @@ Without a volume, `/workspace` is a regular container directory (ephemeral).
 
 `uv`'s sandbox cache (`UV_CACHE_DIR`) and the Hugging Face hub cache (`HF_HOME`) default to `$MARIMO_WORKSPACE/.cache/uv` and `$MARIMO_WORKSPACE/.cache/huggingface`, so downloaded notebook dependencies and models persist on the volume alongside the notebooks.
 marimo itself always launches from the image's prewarmed cache at `/home/runpod/.cache/uv`, so the first boot on a fresh volume needs no download (and no network) to start marimo; only an overridden `MARIMO_VERSION` is downloaded, once, into `UV_CACHE_DIR`.
+Notebook sandboxes, by contrast, build from `UV_CACHE_DIR`, so before launch startup seeds it with the package wheels from the image's prewarmed cache. The first notebook opened on a fresh volume then installs marimo and its dependencies from local wheels instead of re-downloading them (uv may still check the index for newer metadata). Seeding runs once per image marimo and uv version (recorded by a `.runpod-marimo-seeded-<marimo>-uv<uv>` marker in the cache; delete it to seed again), never replaces existing cache entries, and on failure only warns, leaving sandboxes to download as before. It does not affect reproducibility: a cache makes nothing importable, and a sandbox still installs exactly what the notebook's header declares.
 
 ### Opting out of persistent caches
 

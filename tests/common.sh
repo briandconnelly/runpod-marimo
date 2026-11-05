@@ -88,6 +88,23 @@ _probe_dir_as_runpod() {
 # as_runpod CMD-STRING  — run a shell string as the runpod login user
 as_runpod() { su -l runpod -c "$1"; }
 
+# Build a fresh PEP 723 sandbox using only the persistent cache (#116).
+# An explicit cache path prevents the launcher's image cache masking a miss.
+_offline_sandbox_as_runpod() {
+    local cache_q version_q
+    cache_q=$(printf '%q' "$1")
+    version_q=$(printf '%q' "$2")
+    su -l runpod -c "bash -s -- $cache_q $version_q" <<'SANDBOX'
+set -euo pipefail
+cache=$1
+version=$2
+tmp=$(mktemp -d)
+trap 'rm -rf -- "$tmp"' EXIT
+printf '# /// script\n# dependencies = ["marimo==%s"]\n# ///\n' "$version" > "$tmp/notebook.py"
+uv sync --cache-dir "$cache" --script "$tmp/notebook.py" --offline --compile-bytecode
+SANDBOX
+}
+
 # ancestors_of PID — print the comm of every ancestor of PID up to and
 #   including PID 1, nearest first, one per line.
 ancestors_of() {
@@ -277,6 +294,12 @@ shared_tests() {
         if [[ -n "$PREWARMED_VERSION" && "$PREWARMED_VERSION" == "${MARIMO_VERSION:-}" ]]; then
             check "marimo env comes from the prewarmed cache" \
                 has_prefix "$MARIMO_BIN" /home/runpod/.cache/uv/
+            # A stale cached index made the prewarmed launch need PyPI anyway;
+            # the launcher (marimo's parent) must run --offline.
+            local LAUNCHER_PID LAUNCHER_ARGS
+            LAUNCHER_PID=$(ps -o ppid= -p "$MARIMO_PID" | tr -d ' ')
+            LAUNCHER_ARGS=" $(tr '\0' ' ' < /proc/"$LAUNCHER_PID"/cmdline 2>/dev/null) "
+            check "prewarmed launcher runs uvx --offline" has_substr "$LAUNCHER_ARGS" ' --offline '
         fi
         check "mcp streamable-http client importable" \
             "$MARIMO_ENV_PY" -c 'from mcp.client.streamable_http import streamable_http_client'
@@ -306,6 +329,16 @@ shared_tests() {
         check "marimo has HF_HOME set"      test -n "$MARIMO_ENV_HF"
         if [[ -n "$MARIMO_ENV_UV" ]]; then
             check "UV_CACHE_DIR usable by runpod" _probe_dir_as_runpod "$MARIMO_ENV_UV"
+            if [[ ! "$MARIMO_ENV_UV" -ef /home/runpod/.cache/uv ]]; then
+                local seeded_version=""
+                IFS= read -r seeded_version < /usr/local/share/runpod-marimo/prewarmed-marimo-version 2>/dev/null || true
+                local seeded_uv
+                seeded_uv=$(uv --version 2>/dev/null | awk '{print $2}')
+                check "sandbox cache seed marker exists" \
+                    test -f "$MARIMO_ENV_UV/.runpod-marimo-seeded-${seeded_version}-uv${seeded_uv}"
+                check "notebook sandbox builds offline from seeded cache" \
+                    _offline_sandbox_as_runpod "$MARIMO_ENV_UV" "$seeded_version"
+            fi
         fi
         if [[ -n "$MARIMO_ENV_HF" ]]; then
             check "HF_HOME usable by runpod" _probe_dir_as_runpod "$MARIMO_ENV_HF"

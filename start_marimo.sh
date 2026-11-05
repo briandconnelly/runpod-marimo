@@ -379,8 +379,8 @@ MARIMO_ARGS="edit --host 0.0.0.0 --port 2971 ${AUTH_FLAG} --sandbox ${WORKSPACE_
 # a healthy pod, and a crash loop on one without network. `--cache-dir`
 # points only this uvx invocation at the prewarmed cache: uv does not
 # rewrite UV_CACHE_DIR for the child, so marimo and its --sandbox `uv`
-# subprocesses still inherit the volume cache exported above. Nothing is
-# copied into the volume, so its cache is never modified behind uv's back.
+# subprocesses still inherit the volume cache exported above, seeded below
+# before any uv process starts.
 # The flag is applied only when MARIMO_VERSION is the version the image
 # prewarmed; a runtime override resolves into UV_CACHE_DIR as before, where
 # it persists on the volume.
@@ -389,11 +389,96 @@ PREWARMED_VERSION=""
 if [[ -r /usr/local/share/runpod-marimo/prewarmed-marimo-version ]]; then
     IFS= read -r PREWARMED_VERSION < /usr/local/share/runpod-marimo/prewarmed-marimo-version || true
 fi
+
+# Seed the volume's uv cache from the image's prewarmed one (#116). The
+# launcher above runs from the prewarmed cache, but each notebook's --sandbox
+# `uv sync` uses UV_CACHE_DIR, which is empty on a fresh volume, so without
+# this every first notebook open re-downloads marimo and its dependencies.
+# Only package and interpreter buckets are copied, never cached tool or
+# script environments. A cache makes nothing importable: a sandbox installs
+# exactly what the notebook's PEP 723 header declares, wherever the wheels
+# come from. Wheel entries are relative symlinks into archive-v0, so the
+# copy is self-contained.
+# The copy goes to a staging dir inside the cache, and each entry is then
+# moved into place with rename(2), so it lands whole or not at all: a pod
+# stopped mid-seed cannot leave a truncated file that uv would later trust.
+# Existing entries are never replaced, and atomic placement keeps a uv in
+# another pod sharing this cache from ever seeing a partial entry. Runs as
+# runpod so it needs no chown (#115). A versioned marker makes it once per
+# image marimo and uv version; a failure warns and leaves no marker, so the
+# next boot retries and sandboxes fall back to downloads.
+PREWARMED_CACHE=/home/runpod/.cache/uv
+UV_VERSION_SEED=$(uv --version 2>/dev/null | awk '{print $2}')
+if [[ -n "$PREWARMED_VERSION" && -n "$UV_VERSION_SEED" && -d "$PREWARMED_CACHE" && ! "$UV_CACHE_DIR" -ef "$PREWARMED_CACHE" ]]; then
+    # Keyed on uv's version too: a uv upgrade can move a bucket to a new
+    # format (wheels-v7 -> wheels-v8), which an older seed never copied.
+    SEED_MARKER="$UV_CACHE_DIR/.runpod-marimo-seeded-${PREWARMED_VERSION}-uv${UV_VERSION_SEED}"
+    if [[ ! -e "$SEED_MARKER" ]]; then
+        echo "Seeding ${UV_CACHE_DIR} from the image's prewarmed uv cache (once per image marimo and uv version)..."
+        UV_CACHE_Q=$(printf '%q' "$UV_CACHE_DIR")
+        SEED_MARKER_Q=$(printf '%q' "$SEED_MARKER")
+        if su -l runpod -c "bash -s -- $UV_CACHE_Q $SEED_MARKER_Q" <<'SEED'
+cache=$1
+marker=$2
+src=/home/runpod/.cache/uv
+# Pods can share one cache on a network volume, so each seed gets its own
+# staging dir. Ones abandoned by an interrupted boot are swept after an hour.
+find "$cache" -mindepth 1 -maxdepth 1 -name '.runpod-marimo-seed.*' -mmin +60 \
+    -exec rm -rf -- {} + 2>/dev/null
+staging=$(mktemp -d "$cache/.runpod-marimo-seed.XXXXXX") || exit 1
+trap 'cd / && rm -rf -- "$staging" "$staging.list"' EXIT
+for bucket in "$src"/{archive-v0,wheels-v*,simple-v*,sdists-v*,interpreter-v*}; do
+    [[ -d "$bucket" ]] || continue
+    cp -R -- "$bucket" "$staging/" || exit 1
+done
+cd -- "$staging" || exit 1
+# Move an entry into place unless one exists. `mv -n` renames with
+# RENAME_NOREPLACE, so an entry another pod's uv publishes after the
+# existence check is kept rather than overwritten (coreutils falls back to
+# check-then-rename only on filesystems without RENAME_NOREPLACE). A skipped
+# move exits nonzero; it is a success when the destination now exists.
+_place() {
+    [[ -e "$cache/$1" || -L "$cache/$1" ]] && return 0
+    mkdir -p -- "$cache/$(dirname -- "$1")" || return 1
+    mv -n -T -- "$1" "$cache/$1" 2>/dev/null || [[ -e "$cache/$1" || -L "$cache/$1" ]]
+}
+# archive-v0 first, so no wheel symlink is ever moved in ahead of its target.
+# Its entries are immutable, content-addressed directories: move each whole.
+for entry in archive-v0/*; do
+    [[ -e "$entry" ]] || continue
+    _place "$entry" || exit 1
+done
+find . -path ./archive-v0 -prune -o \( -type f -o -type l \) -print0 > "$staging.list" || exit 1
+while IFS= read -r -d '' path; do
+    _place "${path#./}" || exit 1
+done < "$staging.list"
+touch -- "$marker"
+SEED
+        then
+            echo "Seeded uv package cache for marimo ${PREWARMED_VERSION} into ${UV_CACHE_DIR}."
+        else
+            echo "Warning: could not seed uv cache at '${UV_CACHE_DIR}'; notebook sandboxes may need downloads." >&2
+        fi
+    fi
+fi
+
+MARIMO_SPEC_Q=$(printf '%q' "marimo[mcp,lsp]==${MARIMO_VERSION}")
 if [[ -n "$PREWARMED_VERSION" && "$PREWARMED_VERSION" == "$MARIMO_VERSION" ]]; then
-    echo "Launching marimo ${MARIMO_VERSION} from the image's prewarmed uv cache."
     UVX_CACHE_ARG="--cache-dir /home/runpod/.cache/uv"
+    # Even a fully cached uvx revalidates its cached PyPI index responses once
+    # they go stale (minutes after the image build), so without network the
+    # prewarmed launch still failed with a DNS error. The prewarm resolved the
+    # exact requirement set already, so launch --offline when a quick offline
+    # resolve proves the cache is complete. The probe runs separately, rather
+    # than as an `||` fallback on the launch, to keep a shell out of marimo's
+    # process ancestry (signal forwarding depends on it).
+    if su -l runpod -c "uvx --offline ${UVX_CACHE_ARG} ${MARIMO_SPEC_Q} --version" >/dev/null 2>&1; then
+        UVX_CACHE_ARG="--offline ${UVX_CACHE_ARG}"
+        echo "Launching marimo ${MARIMO_VERSION} offline from the image's prewarmed uv cache."
+    else
+        echo "Launching marimo ${MARIMO_VERSION} from the image's prewarmed uv cache (offline resolve failed; uvx may contact PyPI)."
+    fi
 else
     echo "MARIMO_VERSION=${MARIMO_VERSION} differs from the prewarmed ${PREWARMED_VERSION:-<none>}; uvx will download it into ${UV_CACHE_DIR}."
 fi
-MARIMO_SPEC_Q=$(printf '%q' "marimo[mcp,lsp]==${MARIMO_VERSION}")
 exec su -l runpod -c "cd ${WORKSPACE_Q} && exec uvx ${UVX_CACHE_ARG} ${MARIMO_SPEC_Q} $MARIMO_ARGS"
