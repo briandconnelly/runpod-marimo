@@ -21,7 +21,8 @@ Pre-installing them would allow imports that work in the pod but leave no record
 | `MARIMO_TOKEN_PASSWORD` | Password required to access the marimo UI | _(falls back to `JUPYTER_PASSWORD`, else a generated token)_ |
 | `MARIMO_DISABLE_AUTH` | Set to `true` to disable token authentication | `false` |
 
-`/workspace` is where Runpod mounts network volumes, so notebooks created there persist across pod stop/start when a volume is attached (otherwise it is ephemeral).
+**CPU pods have no Volume Disk.** Without a Network Volume attached at `/workspace`, notebooks and their caches live on the Container Disk, which is wiped whenever the pod stops, and the caches use its space.
+Attach a Network Volume to keep them across stop/start ([details](https://github.com/briandconnelly/runpod-marimo#cpu-pods-and-network-volumes)).
 The `uv` sandbox cache (`UV_CACHE_DIR`) and Hugging Face hub cache (`HF_HOME`) default to `$MARIMO_CACHE_DIR/uv` and `$MARIMO_CACHE_DIR/huggingface`, so dependencies and models persist alongside the notebooks; either can be set on its own.
 Set `MARIMO_CACHE_DIR=/home/runpod/.cache` for ephemeral container-local caches; first boot still hits the image's prewarmed `uvx marimo` cache.
 `HF_HOME` holds your Hugging Face login token, so keep it off a volume shared between pods.
