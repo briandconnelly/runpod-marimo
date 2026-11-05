@@ -6,9 +6,17 @@ PASS=0
 FAIL=0
 FAILURES=()
 
+# check DESC CMD [ARG...]
+#
+# Runs CMD with its arguments directly — no eval, no string re-parsing.
+# Values interpolated by the caller (paths, PIDs, tokens with shell
+# metacharacters) arrive as argv entries and can never be re-interpreted
+# as shell syntax. Anything that needs a pipeline, negation or comparison
+# goes through one of the small predicate helpers below instead of a
+# quoted shell fragment.
 check() {
     local desc="$1"; shift
-    if eval "$*" >/dev/null 2>&1; then
+    if "$@" >/dev/null 2>&1; then
         printf '  ok   %s\n' "$desc"
         PASS=$((PASS + 1))
     else
@@ -20,13 +28,70 @@ check() {
 
 section() { printf '\n== %s ==\n' "$*"; }
 
+# ── Predicate helpers ────────────────────────────────────────────────────────
+# Each is a plain command that exits 0/1, so it composes with `check` and
+# with each other (`check "..." not output_has -i libcuda ldconfig -p`).
+
+# not CMD...            — invert a command's exit status
+not() { ! "$@"; }
+
+# eq A B                — exact string equality
+eq() { [[ "$1" == "$2" ]]; }
+
+# has_substr STR SUB    — STR contains SUB literally
+has_substr() { [[ "$1" == *"$2"* ]]; }
+
+# output_has [GREP-OPTS...] PATTERN CMD...
+#   CMD's stdout matches PATTERN (grep -q; leading dash-options are passed
+#   to grep, e.g. -i, -w, -E, -F). stderr is dropped.
+output_has() {
+    local -a opts=()
+    while [[ $# -gt 0 && "$1" == -* ]]; do opts+=("$1"); shift; done
+    local pattern="$1"; shift
+    "$@" 2>/dev/null | grep -q "${opts[@]}" -- "$pattern"
+}
+
+# glob_exists GLOB      — at least one path matches GLOB (GLOB is quoted by the caller)
+glob_exists() { compgen -G "$1" >/dev/null; }
+
+# http_code URL [CURL-ARGS...] — print the HTTP status for a GET of URL
+http_code() {
+    local url="$1"; shift
+    curl -s -o /dev/null -w '%{http_code}' --max-time 5 "$@" "$url"
+}
+
+# wait_for_health SECONDS — poll /health until 2xx or the deadline passes.
+#   Per-attempt --connect-timeout / --max-time cap each curl so a stalled
+#   TCP-accepted-but-HTTP-hung server cannot push the total past the deadline.
+wait_for_health() {
+    local deadline=$(( $(date +%s) + $1 ))
+    while [[ $(date +%s) -lt $deadline ]]; do
+        curl -sfo /dev/null --connect-timeout 3 --max-time 5 http://localhost:2971/health && return 0
+        sleep 5
+    done
+    return 1
+}
+
 # Verify a directory is usable by the runpod user: both the write bit and
 # the execute (search) bit are required to create files inside it, so we
-# check both. Argument is a single printf-%q-quoted path so special
-# characters survive the `su -l -c` re-parse.
+# check both. The path is %q-quoted here, once, so special characters
+# survive the `su -l -c` re-parse — callers pass it raw.
 _probe_dir_as_runpod() {
-    local path_q="$1"
+    local path_q
+    path_q=$(printf '%q' "$1")
     su -l runpod -c "test -w $path_q && test -x $path_q"
+}
+
+# as_runpod CMD-STRING  — run a shell string as the runpod login user
+as_runpod() { su -l runpod -c "$1"; }
+
+# version_major_ge N CMD... — first "vX.Y.Z"/"X.Y.Z" in CMD's output has major >= N
+version_major_ge() {
+    local min="$1"; shift
+    local out major
+    out=$("$@" 2>/dev/null) || return 1
+    major=$(printf '%s\n' "$out" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1 | cut -d. -f1)
+    [[ -n "$major" && "$major" -ge "$min" ]]
 }
 
 shared_tests() {
@@ -36,18 +101,31 @@ shared_tests() {
     section "System packages"
     local cmd
     for cmd in uv uvx gh duckdb runpodctl pi opencode jq git curl wget tmux node ssh; do
-        check "$cmd on PATH" "command -v $cmd"
+        check "$cmd on PATH" command -v "$cmd"
     done
-    check "sshd binary present"     "test -x /usr/sbin/sshd"
-    check "Ubuntu 24.04 base"       "grep -qF 'VERSION_ID=\"24.04\"' /etc/os-release"
-    check "uv from /usr/local/bin"  "[[ \$(command -v uv)  == /usr/local/bin/uv ]]"
-    check "uvx from /usr/local/bin" "[[ \$(command -v uvx) == /usr/local/bin/uvx ]]"
+    check "sshd binary present"     test -x /usr/sbin/sshd
+    check "Ubuntu 24.04 base"       grep -qF 'VERSION_ID="24.04"' /etc/os-release
+    check "uv from /usr/local/bin"  eq "$(command -v uv)"  /usr/local/bin/uv
+    check "uvx from /usr/local/bin" eq "$(command -v uvx)" /usr/local/bin/uvx
+
+    section "Node.js"
+    # marimo's LSP bridge (_lsp/index.cjs) is launched with `node`; the ty
+    # LSP enabled in marimo.toml is dead without it. The binary comes from
+    # the upstream release tarball, not Ubuntu's EOL Node 18 package, and
+    # ships alone — no npm, which would be an unpinned package installer.
+    check "node from /usr/local/bin"   eq "$(command -v node)" /usr/local/bin/node
+    check "node runs"                  node --version
+    check "node major version >= 20"   version_major_ge 20 node --version
+    check "npm not installed"          not command -v npm
+    check "npx not installed"          not command -v npx
+    check "node LICENSE shipped"       test -r /usr/share/licenses/node/LICENSE
+    check "node runs as runpod"        as_runpod 'node --version'
 
     section "Python tooling"
-    check "uv Python 3.13 installed"          "su -l runpod -c 'uv python list --only-installed' 2>/dev/null | grep -q 3.13"
-    check "huggingface_hub installed as tool" "su -l runpod -c 'uv tool list' 2>/dev/null | grep -qi huggingface-hub"
-    check "ty installed as tool"              "su -l runpod -c 'uv tool list' 2>/dev/null | grep -qw ty"
-    check "marimo NOT installed as tool"      "! su -l runpod -c 'uv tool list' 2>/dev/null | grep -qw marimo"
+    check "uv Python 3.13 installed"          output_has '3\.13' as_runpod 'uv python list --only-installed'
+    check "huggingface_hub installed as tool" output_has -i 'huggingface-hub' as_runpod 'uv tool list'
+    check "ty installed as tool"              output_has -w 'ty' as_runpod 'uv tool list'
+    check "marimo NOT installed as tool"      not output_has -w 'marimo' as_runpod 'uv tool list'
 
     section "HTTP endpoint"
     # This section runs BEFORE the process checks: its retry loop is the
@@ -60,12 +138,8 @@ shared_tests() {
     # UV_CACHE_DIR=/workspace/.cache/uv in 0.5.3) re-downloads marimo's
     # sandbox deps before binding :2971, so a single-shot probe races
     # warmup. Observed >6 min on a shared host under load; retry until a
-    # ~10-min wall-clock deadline. Per-attempt --connect-timeout /
-    # --max-time caps each curl so a stalled TCP-accepted-but-HTTP-hung
-    # server can't push total past the deadline. Wrapped in a subshell
-    # so `exit` stays local — `check` uses `eval` in the current shell.
-    check "health endpoint 2xx on :2971" \
-        "(deadline=\$((\$(date +%s) + 600)); while [[ \$(date +%s) -lt \$deadline ]]; do curl -sfo /dev/null --connect-timeout 3 --max-time 5 http://localhost:2971/health && exit 0; sleep 5; done; exit 1)"
+    # ~10-min wall-clock deadline.
+    check "health endpoint 2xx on :2971" wait_for_health 600
     if [[ "${MARIMO_DISABLE_AUTH:-}" != "true" ]]; then
         # Verify the auth boundary end-to-end: the API must reject
         # unauthenticated requests and accept the resolved token.
@@ -73,46 +147,59 @@ shared_tests() {
         # URL-encodes it, so user-chosen passwords with special
         # characters survive the round trip.
         check "API rejects unauthenticated requests" \
-            "[[ \$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 http://localhost:2971/api/status) == 401 ]]"
+            eq "$(http_code http://localhost:2971/api/status)" 401
         check "API accepts the resolved token" \
-            "[[ \$(curl -sG -o /dev/null -w '%{http_code}' --max-time 5 --data-urlencode access_token@/home/runpod/.config/marimo/token http://localhost:2971/api/status) == 200 ]]"
+            eq "$(http_code http://localhost:2971/api/status -G --data-urlencode access_token@/home/runpod/.config/marimo/token)" 200
     fi
 
     section "Marimo process"
     local MARIMO_PID MARIMO_USER MARIMO_CMD MARIMO_WS
     MARIMO_PID=$(pgrep -f 'bin/marimo edit' | head -1 || true)
-    check "marimo editor running" "test -n '$MARIMO_PID'"
+    check "marimo editor running" test -n "$MARIMO_PID"
     if [[ -n "$MARIMO_PID" ]]; then
         MARIMO_USER=$(ps -o user= -p "$MARIMO_PID" | tr -d ' ')
         MARIMO_CMD=$(ps -o args= -p "$MARIMO_PID")
-        check "marimo runs as 'runpod'"   "[[ '$MARIMO_USER' == runpod ]]"
-        check "marimo --sandbox"          "[[ '$MARIMO_CMD' == *--sandbox* ]]"
-        check "marimo --host 0.0.0.0"     "[[ '$MARIMO_CMD' == *'--host 0.0.0.0'* ]]"
-        check "marimo --port 2971"        "[[ '$MARIMO_CMD' == *'--port 2971'* ]]"
+        check "marimo runs as 'runpod'"   eq "$MARIMO_USER" runpod
+        check "marimo --sandbox"          has_substr "$MARIMO_CMD" '--sandbox'
+        check "marimo --host 0.0.0.0"     has_substr "$MARIMO_CMD" '--host 0.0.0.0'
+        check "marimo --port 2971"        has_substr "$MARIMO_CMD" '--port 2971'
+
+        # Shutdown path. start_marimo.sh execs `su -l runpod -c 'cd ... &&
+        # exec uvx ...'`: su is PID 1 and forwards SIGTERM to its child, and
+        # the inner exec chain (bash -> uvx -> marimo) collapses so that
+        # child IS marimo. Without the inner exec, bash sits between them,
+        # dies on SIGTERM without forwarding it, and marimo is orphaned
+        # until Docker's SIGKILL deadline. Asserting the parent is PID 1 is
+        # the structural check for that.
+        check "PID 1 is su (start script exec'd it)" eq "$(ps -o comm= -p 1 | tr -d ' ')" su
+        check "marimo is a direct child of PID 1"    eq "$(ps -o ppid= -p "$MARIMO_PID" | tr -d ' ')" 1
+
         # Token auth is on by default; --no-token appears only when the pod
         # explicitly opted out with MARIMO_DISABLE_AUTH=true. The resolved
         # token travels via --token-password-file (never a bare
         # --token-password flag, which would leak it into `ps`).
         local TOKEN_FILE=/home/runpod/.config/marimo/token
         if [[ "${MARIMO_DISABLE_AUTH:-}" == "true" ]]; then
-            check "marimo --no-token present (auth disabled)" "[[ '$MARIMO_CMD' == *--no-token* ]]"
-            check "marimo --token-password-file absent"       "[[ '$MARIMO_CMD' != *--token-password-file* ]]"
+            check "marimo --no-token present (auth disabled)" has_substr "$MARIMO_CMD" '--no-token'
+            check "marimo --token-password-file absent"       not has_substr "$MARIMO_CMD" '--token-password-file'
         else
-            check "marimo --token-password-file present" "[[ '$MARIMO_CMD' == *--token-password-file* ]]"
-            check "marimo --no-token absent"             "[[ '$MARIMO_CMD' != *--no-token* ]]"
-            check "token not on the command line"        "[[ '$MARIMO_CMD' != *'--token-password '* ]]"
-            check "token file non-empty"                 "test -s $TOKEN_FILE"
-            check "token file owned by runpod"           "[[ \$(stat -c %U $TOKEN_FILE) == runpod ]]"
-            check "token file mode 0600"                 "[[ \$(stat -c %a $TOKEN_FILE) == 600 ]]"
+            check "marimo --token-password-file present" has_substr "$MARIMO_CMD" '--token-password-file'
+            check "marimo --no-token absent"             not has_substr "$MARIMO_CMD" '--no-token'
+            check "token not on the command line"        not has_substr "$MARIMO_CMD" '--token-password '
+            check "token file non-empty"                 test -s "$TOKEN_FILE"
+            check "token file owned by runpod"           eq "$(stat -c %U "$TOKEN_FILE")" runpod
+            check "token file mode 0600"                 eq "$(stat -c %a "$TOKEN_FILE")" 600
             # Resolution order: MARIMO_TOKEN_PASSWORD wins, then
             # JUPYTER_PASSWORD, then a generated token (content unknowable
             # here, so only the two deterministic sources are asserted).
+            # Both values are passed as argv, so a password full of shell
+            # metacharacters (CI uses `sp3c!al ch@rs&?`) needs no quoting.
             if [[ -n "${MARIMO_TOKEN_PASSWORD:-}" ]]; then
                 check "token file matches MARIMO_TOKEN_PASSWORD" \
-                    "[[ \$(cat $TOKEN_FILE) == \"\$MARIMO_TOKEN_PASSWORD\" ]]"
+                    eq "$(cat "$TOKEN_FILE")" "$MARIMO_TOKEN_PASSWORD"
             elif [[ -n "${JUPYTER_PASSWORD:-}" ]]; then
                 check "token file matches JUPYTER_PASSWORD fallback" \
-                    "[[ \$(cat $TOKEN_FILE) == \"\$JUPYTER_PASSWORD\" ]]"
+                    eq "$(cat "$TOKEN_FILE")" "$JUPYTER_PASSWORD"
             fi
         fi
 
@@ -121,15 +208,9 @@ shared_tests() {
         # rather than `ps -o args`, which reconstructs the command line
         # and can re-quote arguments containing spaces.
         MARIMO_WS=$(tr '\0' '\n' < /proc/"$MARIMO_PID"/cmdline | tail -n 1)
-        # Directories need write + execute bits to create new files, so
-        # probe both. `printf %q` produces a shell-re-parseable form of
-        # the path (e.g. `/a\ b` for `/a b`); we then wrap the whole
-        # substitution in double quotes so the eval inside `check` sees
-        # it as a single token and the backslash-escapes survive intact
-        # all the way into the `su -l -c` inner shell.
-        check "marimo workspace usable by runpod" "_probe_dir_as_runpod \"$(printf '%q' "$MARIMO_WS")\""
+        check "marimo workspace usable by runpod" _probe_dir_as_runpod "$MARIMO_WS"
         if [[ -z "${MARIMO_WORKSPACE:-}" ]]; then
-            check "marimo defaults workspace to /workspace" "[[ '$MARIMO_WS' == /workspace ]]"
+            check "marimo defaults workspace to /workspace" eq "$MARIMO_WS" /workspace
         fi
 
         # marimo's cwd must match its workspace arg. `su -l` lands in
@@ -141,8 +222,8 @@ shared_tests() {
         # ptrace-gated and containers do not grant CAP_SYS_PTRACE to
         # root.
         local MARIMO_CWD
-        MARIMO_CWD=$(su -l runpod -c "readlink /proc/$MARIMO_PID/cwd" 2>/dev/null || true)
-        check "marimo cwd matches workspace" "[[ '$MARIMO_CWD' == '$MARIMO_WS' ]]"
+        MARIMO_CWD=$(as_runpod "readlink /proc/$MARIMO_PID/cwd" 2>/dev/null || true)
+        check "marimo cwd matches workspace" eq "$MARIMO_CWD" "$MARIMO_WS"
     fi
 
     section "MCP integration"
@@ -162,13 +243,13 @@ shared_tests() {
         local MARIMO_BIN MARIMO_ENV_PY
         MARIMO_BIN=$(tr '\0' '\n' < /proc/"$MARIMO_PID"/cmdline | head -1)
         MARIMO_ENV_PY="$(dirname "$(dirname "$MARIMO_BIN")")/bin/python"
-        check "marimo tool env python exists" "test -x '$MARIMO_ENV_PY'"
+        check "marimo tool env python exists" test -x "$MARIMO_ENV_PY"
         check "mcp streamable-http client importable" \
-            "'$MARIMO_ENV_PY' -c 'from mcp.client.streamable_http import streamable_http_client'"
+            "$MARIMO_ENV_PY" -c 'from mcp.client.streamable_http import streamable_http_client'
         check "mcp server importable" \
-            "'$MARIMO_ENV_PY' -c 'from mcp.server import MCPServer'"
+            "$MARIMO_ENV_PY" -c 'from mcp.server import MCPServer'
         check "mcp client importable" \
-            "'$MARIMO_ENV_PY' -c 'from mcp import Client'"
+            "$MARIMO_ENV_PY" -c 'from mcp import Client'
     else
         echo "  (skipped — marimo process not found)"
     fi
@@ -185,43 +266,43 @@ shared_tests() {
         # grant CAP_SYS_PTRACE, so root cannot read another user's environ
         # (EPERM). Read as the process owner instead — same pattern used
         # above for /proc/<pid>/cwd.
-        MARIMO_ENV_UV=$(su -l runpod -c "tr '\0' '\n' < /proc/$MARIMO_PID/environ | sed -n 's/^UV_CACHE_DIR=//p'" 2>/dev/null || true)
-        MARIMO_ENV_HF=$(su -l runpod -c "tr '\0' '\n' < /proc/$MARIMO_PID/environ | sed -n 's/^HF_HOME=//p'" 2>/dev/null || true)
-        check "marimo has UV_CACHE_DIR set" "test -n '$MARIMO_ENV_UV'"
-        check "marimo has HF_HOME set"      "test -n '$MARIMO_ENV_HF'"
+        MARIMO_ENV_UV=$(as_runpod "tr '\0' '\n' < /proc/$MARIMO_PID/environ | sed -n 's/^UV_CACHE_DIR=//p'" 2>/dev/null || true)
+        MARIMO_ENV_HF=$(as_runpod "tr '\0' '\n' < /proc/$MARIMO_PID/environ | sed -n 's/^HF_HOME=//p'" 2>/dev/null || true)
+        check "marimo has UV_CACHE_DIR set" test -n "$MARIMO_ENV_UV"
+        check "marimo has HF_HOME set"      test -n "$MARIMO_ENV_HF"
         if [[ -n "$MARIMO_ENV_UV" ]]; then
-            check "UV_CACHE_DIR usable by runpod" "_probe_dir_as_runpod \"$(printf '%q' "$MARIMO_ENV_UV")\""
+            check "UV_CACHE_DIR usable by runpod" _probe_dir_as_runpod "$MARIMO_ENV_UV"
         fi
         if [[ -n "$MARIMO_ENV_HF" ]]; then
-            check "HF_HOME usable by runpod" "_probe_dir_as_runpod \"$(printf '%q' "$MARIMO_ENV_HF")\""
+            check "HF_HOME usable by runpod" _probe_dir_as_runpod "$MARIMO_ENV_HF"
         fi
         if [[ -z "${UV_CACHE_DIR:-}" && -z "${HF_HOME:-}" ]]; then
             EXPECTED_CACHE_ROOT="${MARIMO_CACHE_DIR:-$MARIMO_WS/.cache}"
             check "UV_CACHE_DIR defaults to <cache_root>/uv" \
-                "[[ '$MARIMO_ENV_UV' == '$EXPECTED_CACHE_ROOT/uv' ]]"
+                eq "$MARIMO_ENV_UV" "$EXPECTED_CACHE_ROOT/uv"
             check "HF_HOME defaults to <cache_root>/huggingface" \
-                "[[ '$MARIMO_ENV_HF' == '$EXPECTED_CACHE_ROOT/huggingface' ]]"
+                eq "$MARIMO_ENV_HF" "$EXPECTED_CACHE_ROOT/huggingface"
         fi
     fi
 
     section "Marimo config"
     local MARIMO_TOML=/home/runpod/.config/marimo/marimo.toml
-    check "marimo.toml exists"               "test -r $MARIMO_TOML"
-    check "marimo.toml: uv manager"          "grep -qF 'manager = \"uv\"' $MARIMO_TOML"
-    check "marimo.toml: ty LSP section"      "grep -qF '[language_servers.ty]' $MARIMO_TOML"
-    check "marimo.toml: ty LSP enabled"      "grep -qF 'enabled = true' $MARIMO_TOML"
-    check "marimo.toml: mcp marimo preset"   "grep -qF 'presets = [\"marimo\"]' $MARIMO_TOML"
+    check "marimo.toml exists"               test -r "$MARIMO_TOML"
+    check "marimo.toml: uv manager"          grep -qF 'manager = "uv"' "$MARIMO_TOML"
+    check "marimo.toml: ty LSP section"      grep -qF '[language_servers.ty]' "$MARIMO_TOML"
+    check "marimo.toml: ty LSP enabled"      grep -qF 'enabled = true' "$MARIMO_TOML"
+    check "marimo.toml: mcp marimo preset"   grep -qF 'presets = ["marimo"]' "$MARIMO_TOML"
 
     section "marimo-pair skill"
     local SKILL_DIR=/opt/agent-skills/marimo-pair
-    check "skill payload present"    "test -r $SKILL_DIR/SKILL.md"
+    check "skill payload present"    test -r "$SKILL_DIR/SKILL.md"
     # Upstream ships both scripts 0755; `chmod -R a+rX` in the Dockerfile
     # preserves that (X adds +x only where it already exists, plus dirs),
     # so the exec bit surviving the extract is worth asserting.
-    check "execute-code.sh executable"    "test -x $SKILL_DIR/scripts/execute-code.sh"
-    check "discover-servers.sh executable" "test -x $SKILL_DIR/scripts/discover-servers.sh"
-    check "upstream LICENSE shipped" "test -r /usr/share/licenses/marimo-pair/LICENSE"
-    check "provenance recorded"      "grep -q '^marimo-pair v' $SKILL_DIR/PROVENANCE"
+    check "execute-code.sh executable"     test -x "$SKILL_DIR/scripts/execute-code.sh"
+    check "discover-servers.sh executable" test -x "$SKILL_DIR/scripts/discover-servers.sh"
+    check "upstream LICENSE shipped" test -r /usr/share/licenses/marimo-pair/LICENSE
+    check "provenance recorded"      grep -q '^marimo-pair v' "$SKILL_DIR/PROVENANCE"
 
     # Both identities matter: this image sets no USER, so docker exec and
     # the Runpod console give a root shell, while marimo runs as runpod.
@@ -230,13 +311,13 @@ shared_tests() {
     for skill_home in /root /home/runpod; do
         for skill_dir_name in .claude .agents; do
             check "${skill_home}/${skill_dir_name}/skills link resolves" \
-                "[[ \$(readlink -f ${skill_home}/${skill_dir_name}/skills/marimo-pair) == $SKILL_DIR ]]"
+                eq "$(readlink -f "${skill_home}/${skill_dir_name}/skills/marimo-pair")" "$SKILL_DIR"
             check "${skill_home}/${skill_dir_name}/skills readable through link" \
-                "test -r ${skill_home}/${skill_dir_name}/skills/marimo-pair/SKILL.md"
+                test -r "${skill_home}/${skill_dir_name}/skills/marimo-pair/SKILL.md"
         done
     done
     check "runpod can read its own skill link" \
-        "su -l runpod -c 'test -r ~/.claude/skills/marimo-pair/SKILL.md'"
+        as_runpod 'test -r ~/.claude/skills/marimo-pair/SKILL.md'
 
     # Functional probe. execute-code.sh resolves MARIMO_TOKEN, then hits
     # GET /api/sessions before executing anything, so it exercises the real
@@ -250,24 +331,19 @@ shared_tests() {
     # the HTTP endpoint section above; this asserts the skill's own script
     # picks up the exported token, which those cannot see.
     if [[ "${MARIMO_DISABLE_AUTH:-}" != "true" ]]; then
-        # Output goes to files rather than into the `check` string: it is
-        # program output, so a stray quote in it would otherwise break the
-        # eval inside check.
         local PAIR_OUT=/tmp/marimo-pair-probe.out
         local PAIR_OUT_NOTOKEN=/tmp/marimo-pair-probe-notoken.out
-        su -l runpod -c \
-            "bash $SKILL_DIR/scripts/execute-code.sh --url http://localhost:2971 -c pass" \
+        as_runpod "bash $SKILL_DIR/scripts/execute-code.sh --url http://localhost:2971 -c pass" \
             > "$PAIR_OUT" 2>&1 || true
         check "execute-code.sh authenticates via exported MARIMO_TOKEN" \
-            "! grep -qF 'Failed to connect' $PAIR_OUT"
+            not grep -qF 'Failed to connect' "$PAIR_OUT"
         # Negative control: the same call with the token stripped must not
         # get past auth. Without it, the check above would also pass against
         # a server that required no token at all.
-        su -l runpod -c \
-            "MARIMO_TOKEN= bash $SKILL_DIR/scripts/execute-code.sh --url http://localhost:2971 -c pass" \
+        as_runpod "MARIMO_TOKEN= bash $SKILL_DIR/scripts/execute-code.sh --url http://localhost:2971 -c pass" \
             > "$PAIR_OUT_NOTOKEN" 2>&1 || true
         check "execute-code.sh is rejected without a token" \
-            "grep -qF 'Failed to connect' $PAIR_OUT_NOTOKEN"
+            grep -qF 'Failed to connect' "$PAIR_OUT_NOTOKEN"
     fi
 
     section "Coding agents"
@@ -279,32 +355,31 @@ shared_tests() {
     # cheapest probe that actually executes each binary, which a bare
     # `command -v` cannot — a tarball with the wrong architecture or a
     # missing dynamic library would still be "on PATH".
-    check "pi launcher is a script, not the binary" "grep -q '^exec /opt/pi/pi' /usr/local/bin/pi"
-    check "pi binary present under /opt/pi"         "test -x /opt/pi/pi"
-    check "pi runtime assets present"               "test -r /opt/pi/photon_rs_bg.wasm && test -d /opt/pi/theme"
-    check "pi LICENSE shipped"                      "test -r /usr/share/licenses/pi/LICENSE"
-    check "opencode LICENSE shipped"                "test -r /usr/share/licenses/opencode/LICENSE"
+    check "pi launcher is a script, not the binary" grep -q '^exec /opt/pi/pi' /usr/local/bin/pi
+    check "pi binary present under /opt/pi"         test -x /opt/pi/pi
+    check "pi wasm module present"                  test -r /opt/pi/photon_rs_bg.wasm
+    check "pi theme directory present"              test -d /opt/pi/theme
+    check "pi LICENSE shipped"                      test -r /usr/share/licenses/pi/LICENSE
+    check "opencode LICENSE shipped"                test -r /usr/share/licenses/opencode/LICENSE
     # Both identities matter, as with the skill links above: docker exec
     # and the console give root, marimo's terminal gives runpod.
     local agent
     for agent in pi opencode; do
-        check "$agent --version runs as root" \
-            "$agent --version 2>/dev/null | grep -Eq '[0-9]+\.[0-9]+\.[0-9]+'"
-        check "$agent --version runs as runpod" \
-            "su -l runpod -c '$agent --version' 2>/dev/null | grep -Eq '[0-9]+\.[0-9]+\.[0-9]+'"
+        check "$agent --version runs as root"   output_has -E '[0-9]+\.[0-9]+\.[0-9]+' "$agent" --version
+        check "$agent --version runs as runpod" output_has -E '[0-9]+\.[0-9]+\.[0-9]+' as_runpod "$agent --version"
     done
 
     section "Env forwarding"
     local RE_ENV=/etc/profile.d/runpod-env.sh
     local ZZ_ENV=/etc/profile.d/zz-pod-env.sh
-    check "runpod-env.sh exists"                         "test -r $RE_ENV"
-    check "runpod-env.sh exports UV path"                "grep -qF 'export UV=/usr/local/bin/uv' $RE_ENV"
-    check "runpod-env.sh exports MARIMO_VERSION"         "grep -q 'export MARIMO_VERSION=' $RE_ENV"
-    check "zz-pod-env.sh exists"                             "test -r $ZZ_ENV"
-    check "zz-pod-env.sh does not leak PUBLIC_KEY"            "! grep -q '^export PUBLIC_KEY' $ZZ_ENV"
-    check "zz-pod-env.sh does not leak JUPYTER_PASSWORD"      "! grep -q '^export JUPYTER_PASSWORD' $ZZ_ENV"
-    check "zz-pod-env.sh does not leak MARIMO_TOKEN_PASSWORD" "! grep -q '^export MARIMO_TOKEN_PASSWORD' $ZZ_ENV"
-    check "zz-pod-env.sh does not leak MARIMO_DISABLE_AUTH"   "! grep -q '^export MARIMO_DISABLE_AUTH' $ZZ_ENV"
+    check "runpod-env.sh exists"                         test -r "$RE_ENV"
+    check "runpod-env.sh exports UV path"                grep -qF 'export UV=/usr/local/bin/uv' "$RE_ENV"
+    check "runpod-env.sh exports MARIMO_VERSION"         grep -q 'export MARIMO_VERSION=' "$RE_ENV"
+    check "zz-pod-env.sh exists"                             test -r "$ZZ_ENV"
+    check "zz-pod-env.sh does not leak PUBLIC_KEY"            not grep -q '^export PUBLIC_KEY' "$ZZ_ENV"
+    check "zz-pod-env.sh does not leak JUPYTER_PASSWORD"      not grep -q '^export JUPYTER_PASSWORD' "$ZZ_ENV"
+    check "zz-pod-env.sh does not leak MARIMO_TOKEN_PASSWORD" not grep -q '^export MARIMO_TOKEN_PASSWORD' "$ZZ_ENV"
+    check "zz-pod-env.sh does not leak MARIMO_DISABLE_AUTH"   not grep -q '^export MARIMO_DISABLE_AUTH' "$ZZ_ENV"
 
     # MARIMO_TOKEN is deliberately exported (so bundled agent tooling can
     # authenticate), but only the value the Authentication block resolved.
@@ -318,9 +393,9 @@ shared_tests() {
     # would pass while the shell users actually get had no token at all.
     # `bash -ic` is the interactive non-login path; stderr is dropped because
     # bash warns about job control when stdin is not a tty.
-    # Captured to files rather than compared inline: a token can legitimately
-    # contain shell metacharacters (CI exercises `sp3c!al ch@rs&?`), and the
-    # eval inside `check` would mangle it. `cmp` sidesteps quoting entirely.
+    # Captured to files and compared with `cmp`: a token can legitimately
+    # contain shell metacharacters (CI exercises `sp3c!al ch@rs&?`) and
+    # trailing whitespace that command substitution would strip.
     local TOKFILE=/home/runpod/.config/marimo/token
     local u
     for u in root runpod; do
@@ -331,42 +406,42 @@ shared_tests() {
     done
     if [[ "${MARIMO_DISABLE_AUTH:-}" == "true" ]]; then
         check "zz-pod-env.sh omits MARIMO_TOKEN (auth disabled)" \
-            "! grep -q '^export MARIMO_TOKEN=' $ZZ_ENV"
+            not grep -q '^export MARIMO_TOKEN=' "$ZZ_ENV"
         # start_marimo.sh removes the token file when auth is disabled, so
         # the .bashrc hook has nothing to read and cannot resurrect a token
         # left behind by an earlier boot with auth on.
-        check "token file removed (auth disabled)" "! test -e $TOKFILE"
+        check "token file removed (auth disabled)" not test -e "$TOKFILE"
         for u in root runpod; do
             check "$u interactive shell has no MARIMO_TOKEN (auth disabled)" \
-                "! test -s /tmp/tok-inter-$u"
+                not test -s "/tmp/tok-inter-$u"
         done
     else
         check "zz-pod-env.sh exports MARIMO_TOKEN" \
-            "grep -q '^export MARIMO_TOKEN=' $ZZ_ENV"
+            grep -q '^export MARIMO_TOKEN=' "$ZZ_ENV"
         for u in root runpod; do
             check "$u login shell MARIMO_TOKEN matches the token file" \
-                "cmp -s /tmp/tok-login-$u $TOKFILE"
+                cmp -s "/tmp/tok-login-$u" "$TOKFILE"
             check "$u interactive shell MARIMO_TOKEN matches the token file" \
-                "cmp -s /tmp/tok-inter-$u $TOKFILE"
+                cmp -s "/tmp/tok-inter-$u" "$TOKFILE"
         done
     fi
 
     section "User and permissions"
-    check "runpod user exists"            "id runpod"
-    check "home owned by runpod"          "[[ \$(stat -c %U /home/runpod) == runpod ]]"
-    check "sudoers drop-in scoped to apt" "grep -qF 'NOPASSWD: /usr/bin/apt-get, /usr/bin/apt' /etc/sudoers.d/runpod"
-    check "sudoers drop-in mode 0440"     "[[ \$(stat -c %a /etc/sudoers.d/runpod) == 440 ]]"
+    check "runpod user exists"            id runpod
+    check "home owned by runpod"          eq "$(stat -c %U /home/runpod)" runpod
+    check "sudoers drop-in scoped to apt" grep -qF 'NOPASSWD: /usr/bin/apt-get, /usr/bin/apt' /etc/sudoers.d/runpod
+    check "sudoers drop-in mode 0440"     eq "$(stat -c %a /etc/sudoers.d/runpod)" 440
 
     section "SSH setup"
     if [[ -r /root/.ssh/authorized_keys ]]; then
         local KEY_COUNT UNIQ_COUNT kt
-        KEY_COUNT=$(wc -l < /root/.ssh/authorized_keys)
-        UNIQ_COUNT=$(sort -u /root/.ssh/authorized_keys | wc -l)
-        check "authorized_keys non-empty"     "[[ $KEY_COUNT -ge 1 ]]"
-        check "authorized_keys no duplicates" "[[ $KEY_COUNT -eq $UNIQ_COUNT ]]"
-        check "/run/sshd exists"              "test -d /run/sshd"
+        KEY_COUNT=$(wc -l < /root/.ssh/authorized_keys | tr -d ' ')
+        UNIQ_COUNT=$(sort -u /root/.ssh/authorized_keys | wc -l | tr -d ' ')
+        check "authorized_keys non-empty"     test "$KEY_COUNT" -ge 1
+        check "authorized_keys no duplicates" test "$KEY_COUNT" -eq "$UNIQ_COUNT"
+        check "/run/sshd exists"              test -d /run/sshd
         for kt in rsa ecdsa ed25519; do
-            check "host key $kt"              "test -r /etc/ssh/ssh_host_${kt}_key"
+            check "host key $kt"              test -r "/etc/ssh/ssh_host_${kt}_key"
         done
     else
         echo "  (skipped — no /root/.ssh/authorized_keys; PUBLIC_KEY was not provided)"
@@ -384,11 +459,11 @@ shared_tests() {
     SBX_VENV=$(ls -dt /tmp/marimo-sandbox-*/venv 2>/dev/null | head -1 || true)
     if [[ -n "$SBX_VENV" ]]; then
         PY="$SBX_VENV/bin/python"
-        check "sandbox venv python exists"     "test -x $PY"
-        check "sandbox sys.prefix is the venv" "[[ \$($PY -c 'import sys; print(sys.prefix)') == $SBX_VENV ]]"
-        check "marimo importable in sandbox"   "$PY -c 'import marimo'"
+        check "sandbox venv python exists"     test -x "$PY"
+        check "sandbox sys.prefix is the venv" eq "$("$PY" -c 'import sys; print(sys.prefix)')" "$SBX_VENV"
+        check "marimo importable in sandbox"   "$PY" -c 'import marimo'
         check "no uv tool env on sandbox sys.path" \
-            "$PY -c 'import sys; sys.exit(1 if any(\"/.local/share/uv/tools/\" in p for p in sys.path) else 0)'"
+            "$PY" -c 'import sys; sys.exit(1 if any("/.local/share/uv/tools/" in p for p in sys.path) else 0)'
     else
         echo "  (skipped — no /tmp/marimo-sandbox-*/venv yet; open a notebook and rerun)"
     fi
