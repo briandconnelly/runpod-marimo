@@ -459,11 +459,23 @@ SEED
     fi
 fi
 
+MARIMO_SPEC_Q=$(printf '%q' "marimo[mcp,lsp]==${MARIMO_VERSION}")
 if [[ -n "$PREWARMED_VERSION" && "$PREWARMED_VERSION" == "$MARIMO_VERSION" ]]; then
-    echo "Launching marimo ${MARIMO_VERSION} from the image's prewarmed uv cache."
     UVX_CACHE_ARG="--cache-dir /home/runpod/.cache/uv"
+    # Even a fully cached uvx revalidates its cached PyPI index responses once
+    # they go stale (minutes after the image build), so without network the
+    # prewarmed launch still failed with a DNS error. The prewarm resolved the
+    # exact requirement set already, so launch --offline when a quick offline
+    # resolve proves the cache is complete. The probe runs separately, rather
+    # than as an `||` fallback on the launch, to keep a shell out of marimo's
+    # process ancestry (signal forwarding depends on it).
+    if su -l runpod -c "uvx --offline ${UVX_CACHE_ARG} ${MARIMO_SPEC_Q} --version" >/dev/null 2>&1; then
+        UVX_CACHE_ARG="--offline ${UVX_CACHE_ARG}"
+        echo "Launching marimo ${MARIMO_VERSION} offline from the image's prewarmed uv cache."
+    else
+        echo "Launching marimo ${MARIMO_VERSION} from the image's prewarmed uv cache (offline resolve failed; uvx may contact PyPI)."
+    fi
 else
     echo "MARIMO_VERSION=${MARIMO_VERSION} differs from the prewarmed ${PREWARMED_VERSION:-<none>}; uvx will download it into ${UV_CACHE_DIR}."
 fi
-MARIMO_SPEC_Q=$(printf '%q' "marimo[mcp,lsp]==${MARIMO_VERSION}")
 exec su -l runpod -c "cd ${WORKSPACE_Q} && exec uvx ${UVX_CACHE_ARG} ${MARIMO_SPEC_Q} $MARIMO_ARGS"

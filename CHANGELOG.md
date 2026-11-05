@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- marimo starts without network again when `MARIMO_VERSION` is the image's prewarmed version. The #50 launch from the prewarmed cache still let `uvx` revalidate its cached PyPI index responses, which go stale minutes after the image build, so with no network (or unreachable PyPI) the launch failed with a DNS error and the container exited. Startup now checks that the prewarmed cache resolves offline and, if so, launches `uvx --offline`; otherwise it launches as before.
 - Notebook sandboxes on fresh persistent volumes now reuse the image's prewarmed marimo packages instead of downloading them again, avoiding slow kernel startup and network timeout failures (#116). Startup seeds the volume cache once per image marimo and uv version, placing each entry atomically so an interrupted boot or another pod sharing the cache never sees a partial one; existing entries are never replaced, and notebook dependency isolation is unchanged (a cache makes nothing importable).
 - Pods with volumes that deny ownership changes now start on the first boot when their workspace and cache directories are writable by `runpod` (#115). Failed ownership changes warn and defer to the permission probes, so unusable directories fail immediately with a clear error instead of causing repeated restarts as each cache directory is created.
 

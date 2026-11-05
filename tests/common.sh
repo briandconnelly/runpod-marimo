@@ -294,6 +294,12 @@ shared_tests() {
         if [[ -n "$PREWARMED_VERSION" && "$PREWARMED_VERSION" == "${MARIMO_VERSION:-}" ]]; then
             check "marimo env comes from the prewarmed cache" \
                 has_prefix "$MARIMO_BIN" /home/runpod/.cache/uv/
+            # A stale cached index made the prewarmed launch need PyPI anyway;
+            # the launcher (marimo's parent) must run --offline.
+            local LAUNCHER_PID LAUNCHER_ARGS
+            LAUNCHER_PID=$(ps -o ppid= -p "$MARIMO_PID" | tr -d ' ')
+            LAUNCHER_ARGS=" $(tr '\0' ' ' < /proc/"$LAUNCHER_PID"/cmdline 2>/dev/null) "
+            check "prewarmed launcher runs uvx --offline" has_substr "$LAUNCHER_ARGS" ' --offline '
         fi
         check "mcp streamable-http client importable" \
             "$MARIMO_ENV_PY" -c 'from mcp.client.streamable_http import streamable_http_client'
