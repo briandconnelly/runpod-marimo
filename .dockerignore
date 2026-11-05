@@ -1,6 +1,17 @@
-.venv
+# Only the Dockerfile, start_marimo.sh and marimo.toml are COPY'd into the
+# image. Everything else is excluded so the build context stays small and
+# a docs or test edit cannot invalidate a layer.
 .git
+.github
+.claude
+tests
+scripts
 docs
+*.md
+.hadolint.yaml
+renovate.json
+.gitignore
+.venv
 *.pyc
 __pycache__
 .env
