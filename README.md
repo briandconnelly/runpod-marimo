@@ -41,6 +41,12 @@ Pre-installing packages would allow imports that work in the pod but have no rec
 `/workspace` is where Runpod mounts network volumes, so notebooks created through the file browser automatically persist across pod stop/start when a volume is attached.
 Without a volume, `/workspace` is a regular container directory (ephemeral).
 
+### CPU pods and Network Volumes
+
+Runpod CPU pods cannot use a Volume Disk (the pod-template API disallows the `persistent` mount on CPU pods), so on the CPU variant the only way to persist `/workspace` is a [Network Volume](https://docs.runpod.io/storage/network-volumes) mounted there.
+Without one, `/workspace` lives on the Container Disk, which is wiped every time the pod stops: notebooks are lost, and any packages and models they downloaded must be downloaded again (marimo's own packages are seeded from the image's prewarmed cache, so only notebook-specific dependencies are refetched).
+The `uv` and Hugging Face caches also take up Container Disk space, so size it for the packages and models your notebooks use (the published CPU template uses 20 GB, the most Runpod allows for a 2-vCPU pod).
+
 `uv`'s sandbox cache (`UV_CACHE_DIR`) and the Hugging Face hub cache (`HF_HOME`) default to `$MARIMO_WORKSPACE/.cache/uv` and `$MARIMO_WORKSPACE/.cache/huggingface`, so downloaded notebook dependencies and models persist on the volume alongside the notebooks.
 marimo itself always launches from the image's prewarmed cache at `/home/runpod/.cache/uv`, so the first boot on a fresh volume needs no download (and no network) to start marimo; only an overridden `MARIMO_VERSION` is downloaded, once, into `UV_CACHE_DIR`.
 Notebook sandboxes, by contrast, build from `UV_CACHE_DIR`, so before launch startup seeds it with the package wheels from the image's prewarmed cache. The first notebook opened on a fresh volume then installs marimo and its dependencies from local wheels instead of re-downloading them (uv may still check the index for newer metadata). Seeding runs once per image marimo and uv version (recorded by a `.runpod-marimo-seeded-<marimo>-uv<uv>` marker in the cache; delete it to seed again), never replaces existing cache entries, and on failure only warns, leaving sandboxes to download as before. It does not affect reproducibility: a cache makes nothing importable, and a sandbox still installs exactly what the notebook's header declares.
