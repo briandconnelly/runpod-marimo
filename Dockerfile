@@ -62,7 +62,6 @@ RUN apt-get update --yes && \
         sudo \
         jq \
         tmux \
-        nodejs \
         openssh-server \
         unzip \
     && if [ "${VARIANT}" = "gpu" ]; then \
@@ -107,12 +106,40 @@ RUN curl -fsSL "https://github.com/runpod/runpodctl/releases/download/${RUNPODCT
     echo "${RUNPODCTL_SHA256}  /usr/local/bin/runpodctl" | sha256sum -c && \
     chmod +x /usr/local/bin/runpodctl
 
+# ── Node.js ──────────────────────────────────────────────────────────────────
+# Node is load-bearing for the editor, not a convenience: marimo's language
+# server bridge is JavaScript (marimo/_lsp/index.cjs), and every LSP backend
+# it offers — ty (enabled in marimo.toml), pylsp, basedpyright, pyrefly,
+# Copilot — is launched as `node index.cjs --lsp <backend>`. marimo refuses
+# to start the LSP when `node` is not on PATH, and Copilot requires Node 20+.
+#
+# Installed from the upstream release tarball rather than Ubuntu's `nodejs`
+# package because that package is Node 18, end-of-life since April 2025 and
+# no longer receiving security fixes. Only the `node` binary is installed —
+# no npm, npx or headers — so nothing here can install packages, and a
+# notebook cannot import it. The tarball carries its LICENSE, shipped under
+# /usr/share/licenses/node because this image is published publicly.
+# renovate: datasource=node-version depName=node
+ARG NODE_VERSION=v26.13.0
+ARG NODE_SHA256=5848553868b402d3fabb5b09270649977780a390f832155721025a08b5104455
+RUN curl -fsSL "https://nodejs.org/dist/${NODE_VERSION}/node-${NODE_VERSION}-linux-x64.tar.gz" \
+        -o /tmp/node.tar.gz && \
+    echo "${NODE_SHA256}  /tmp/node.tar.gz" | sha256sum -c && \
+    mkdir -p /usr/share/licenses/node && \
+    tar -xzf /tmp/node.tar.gz -C /usr/local/bin --strip-components=2 \
+        "node-${NODE_VERSION}-linux-x64/bin/node" && \
+    tar -xzf /tmp/node.tar.gz -C /usr/share/licenses/node --strip-components=1 \
+        "node-${NODE_VERSION}-linux-x64/LICENSE" && \
+    rm /tmp/node.tar.gz && \
+    chmod 755 /usr/local/bin/node && \
+    node --version
+
 # ── Coding agents: pi and opencode ───────────────────────────────────────────
 # Both ship as pinned, checksum-verified standalone Linux builds, like every
-# other tool above. The npm route is not an option: the `nodejs` apt package
-# has no npm and is Node 18, while pi's npm package needs Node >= 22.19, so
-# npm would drag in a second, unpinned Node toolchain for nothing — both
-# projects publish Bun-compiled binaries that need no Node at all.
+# other tool above. The npm route is not an option: the image ships only the
+# `node` binary (no npm), and both projects publish Bun-compiled binaries
+# that need no Node at all, so npm would add an unpinned toolchain for
+# nothing.
 #
 # Neither binary is a Python package; nothing here is importable from a
 # notebook, so the no-domain-packages rule is untouched. Both agents scan
@@ -173,9 +200,9 @@ RUN curl -fsSL "https://github.com/anomalyco/opencode/releases/download/${OPENCO
 # notebook.
 #
 # Upstream documents `npx skills add` or the Claude Code plugin marketplace.
-# Neither is usable here: the `nodejs` apt package ships no npm/npx, and an
-# unpinned network install at build time would be the only unverified download
-# in this image. So the release tarball is pinned and checksum-verified like
+# Neither is usable here: the image ships no npm/npx, and an unpinned
+# network install at build time would be the only unverified download in
+# this image. So the release tarball is pinned and checksum-verified like
 # every other tool above. The repo publishes no release assets, hence the
 # generated tag archive and `datasource=github-tags`.
 #
@@ -200,10 +227,23 @@ RUN curl -fsSL "https://github.com/marimo-team/marimo-pair/archive/refs/tags/${M
     chmod -R a+rX /opt/agent-skills /usr/share/licenses/marimo-pair
 
 # ── runpod user ──────────────────────────────────────────────────────────────
-# Passwordless sudo is scoped to apt-get/apt so users can install system
-# packages from notebooks and terminals. This is an intentional tradeoff:
-# apt can still run maintainer scripts as root, but removing sudo entirely
-# would break the interactive development experience on Runpod pods.
+# marimo runs as `runpod` rather than root. Be clear about what that buys:
+# it is hygiene, not a security boundary. The passwordless sudo below is
+# scoped to apt-get/apt so users can install system packages from the
+# marimo terminal, and apt is root-equivalent by design — maintainer scripts
+# run as root, and `sudo apt-get -o APT::Update::Pre-Invoke=<cmd> update`
+# runs any command as root in one line. So anything running as `runpod`
+# (every notebook cell) can become root whenever it wants to.
+#
+# That is acceptable here because this image's trust model already grants
+# the same thing: it sets no USER, so the Runpod console, SSH and `docker
+# exec` all land as root, and the pod is single-tenant. What the separate
+# user does provide is unprivileged defaults — files created by notebooks
+# are not root-owned, a stray `rm -rf` inside a cell cannot take out /usr,
+# and the HOME-relative caches (uv tool envs, HF token) live in a
+# predictable per-user place. The 0600 token file and 0640 pod-env file
+# are protection against accidental reads, not against a hostile notebook.
+# The READMEs state this plainly; do not describe `runpod` as a sandbox.
 RUN useradd -m -s /bin/bash runpod && \
     echo "runpod ALL=(ALL) NOPASSWD: /usr/bin/apt-get, /usr/bin/apt" > /etc/sudoers.d/runpod && \
     chmod 0440 /etc/sudoers.d/runpod
