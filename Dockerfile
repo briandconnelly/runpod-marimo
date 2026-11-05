@@ -357,11 +357,18 @@ RUN su -l runpod -c "uv tool install huggingface_hub==${HUGGINGFACE_HUB_VERSION}
 # ── Marimo uvx cache warm-up ─────────────────────────────────────────────────
 # Populate uvx's tool-env cache so the `uvx marimo[mcp,lsp]==VER` launch in
 # start_marimo.sh is a cache hit on first boot (saves ~1-2 minutes on a cold
-# pod). uvx keys the cache on the whole requirement set, not the package spec
-# alone, so this invocation must request the same set start_marimo.sh does.
-# Users who override MARIMO_VERSION at runtime pay the download cost once for
-# their new version.
-RUN su -l runpod -c "uvx 'marimo[mcp,lsp]==${MARIMO_VERSION}' --version"
+# pod, and needs no network). uvx keys the cache on the whole requirement
+# set, not the package spec alone, so this invocation must request the same
+# set start_marimo.sh does.
+#
+# start_marimo.sh points the marimo launcher at this cache with
+# `uvx --cache-dir` even when UV_CACHE_DIR is on a network volume, but only
+# when MARIMO_VERSION still matches the version recorded here. Users who
+# override MARIMO_VERSION at runtime pay the download cost once for their
+# new version, into UV_CACHE_DIR.
+RUN su -l runpod -c "uvx 'marimo[mcp,lsp]==${MARIMO_VERSION}' --version" && \
+    install -d /usr/local/share/runpod-marimo && \
+    printf '%s\n' "${MARIMO_VERSION}" > /usr/local/share/runpod-marimo/prewarmed-marimo-version
 
 # ── Marimo config ────────────────────────────────────────────────────────────
 COPY marimo.toml /home/runpod/.config/marimo/marimo.toml
@@ -376,9 +383,11 @@ EXPOSE 2971
 # /health is served 200 without authentication (verified on marimo 0.24.2),
 # so the probe works identically with and without token auth — `/` answers
 # with a 303 to the login page when a token is required. start-period is
-# 600s because a first boot against an empty persistent cache (network
-# volume) re-downloads marimo's sandbox deps before binding :2971; >6 min
-# has been observed on a shared host under load (see tests/common.sh).
+# 600s as headroom for slow first boots: before marimo launched from the
+# prewarmed cache, a first boot against an empty persistent cache (network
+# volume) re-downloaded marimo before binding :2971, and >6 min was observed
+# on a shared host under load. A runtime MARIMO_VERSION override still
+# downloads on first boot.
 #
 # JSON (exec) notation, so hadolint's DL3025 is satisfied without an ignore.
 # The probe still needs a shell for the `||`, so one is named explicitly;

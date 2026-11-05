@@ -41,6 +41,9 @@ eq() { [[ "$1" == "$2" ]]; }
 # has_substr STR SUB    — STR contains SUB literally
 has_substr() { [[ "$1" == *"$2"* ]]; }
 
+# has_prefix STR PRE    — STR starts with PRE literally
+has_prefix() { [[ "$1" == "$2"* ]]; }
+
 # output_has [GREP-OPTS...] PATTERN CMD...
 #   CMD's stdout matches PATTERN (grep -q; leading dash-options are passed
 #   to grep, e.g. -i, -w, -E, -F). stderr is dropped.
@@ -147,11 +150,10 @@ shared_tests() {
     # marimo's launch; once /health answers, the process must exist.
     # /health is served 200 without authentication, so this probe works
     # identically whether token auth is on (default) or disabled.
-    # First boot against an empty persistent cache (network volume + new
-    # UV_CACHE_DIR=/workspace/.cache/uv in 0.5.3) re-downloads marimo's
-    # sandbox deps before binding :2971, so a single-shot probe races
-    # warmup. Observed >6 min on a shared host under load; retry until a
-    # ~10-min wall-clock deadline.
+    # marimo now launches from the image's prewarmed cache, but a runtime
+    # MARIMO_VERSION override still downloads before binding :2971 on first
+    # boot against an empty persistent cache, and that was observed to take
+    # >6 min on a shared host under load. Retry until a ~10-min deadline.
     check "health endpoint 2xx on :2971" wait_for_health 600
     if [[ "${MARIMO_DISABLE_AUTH:-}" != "true" ]]; then
         # Verify the auth boundary end-to-end: the API must reject
@@ -265,6 +267,17 @@ shared_tests() {
         MARIMO_BIN=$(tr '\0' '\n' < /proc/"$MARIMO_PID"/cmdline | head -1)
         MARIMO_ENV_PY="$(dirname "$(dirname "$MARIMO_BIN")")/bin/python"
         check "marimo tool env python exists" test -x "$MARIMO_ENV_PY"
+        # #50: the launcher reads the image's prewarmed cache via
+        # `uvx --cache-dir`, whatever UV_CACHE_DIR is, so first boot on an
+        # empty volume needs no download. Only when MARIMO_VERSION is the
+        # prewarmed version; a runtime override resolves into UV_CACHE_DIR.
+        local PREWARMED_VERSION=""
+        IFS= read -r PREWARMED_VERSION < /usr/local/share/runpod-marimo/prewarmed-marimo-version 2>/dev/null || true
+        check "prewarmed marimo version recorded" test -n "$PREWARMED_VERSION"
+        if [[ -n "$PREWARMED_VERSION" && "$PREWARMED_VERSION" == "${MARIMO_VERSION:-}" ]]; then
+            check "marimo env comes from the prewarmed cache" \
+                has_prefix "$MARIMO_BIN" /home/runpod/.cache/uv/
+        fi
         check "mcp streamable-http client importable" \
             "$MARIMO_ENV_PY" -c 'from mcp.client.streamable_http import streamable_http_client'
         check "mcp server importable" \

@@ -42,6 +42,7 @@ Pre-installing packages would allow imports that work in the pod but have no rec
 Without a volume, `/workspace` is a regular container directory (ephemeral).
 
 `uv`'s sandbox cache (`UV_CACHE_DIR`) and the Hugging Face hub cache (`HF_HOME`) default to `$MARIMO_WORKSPACE/.cache/uv` and `$MARIMO_WORKSPACE/.cache/huggingface`, so downloaded notebook dependencies and models persist on the volume alongside the notebooks.
+marimo itself always launches from the image's prewarmed cache at `/home/runpod/.cache/uv`, so the first boot on a fresh volume needs no download (and no network) to start marimo; only an overridden `MARIMO_VERSION` is downloaded, once, into `UV_CACHE_DIR`.
 
 ### Opting out of persistent caches
 
@@ -51,7 +52,7 @@ If you don't want the caches on the volume — e.g. the volume is small, you'd p
 MARIMO_CACHE_DIR=/home/runpod/.cache
 ```
 
-That restores ephemeral container-local caches. The image's prewarmed `uvx marimo` cache lives at `/home/runpod/.cache/uv`, so first-boot launches are a cache hit.
+That restores ephemeral container-local caches, so notebook dependencies and models are re-downloaded whenever the container is recreated.
 `UV_CACHE_DIR` and `HF_HOME` can also be set individually to relocate either cache independently.
 
 > **Shared volumes:** `HF_HOME` stores the Hugging Face auth token (`~/.cache/huggingface/token`), so a volume shared between pods will also share whoever is currently logged in with `huggingface-cli login`. If that's not what you want, keep `HF_HOME` off the shared volume (`HF_HOME=/home/runpod/.cache/huggingface`) while leaving `UV_CACHE_DIR` wherever you want it.

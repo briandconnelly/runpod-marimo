@@ -210,16 +210,21 @@ jobs:
         # MARIMO_DISABLE_AUTH, so each branch of the startup script's
         # token resolution gets exercised against a real container.
         run: |
-          run_suite() {
+          # run_suite_raw takes the docker-run flags verbatim; run_suite
+          # adds the ephemeral-cache override most suites use.
+          run_suite_raw() {
             local name="$1"; shift
             echo "::group::smoke: $name"
             docker run -d --name marimo-ci "$@" \
               -v "$(pwd)/tests:/tests:ro" \
-              -e MARIMO_CACHE_DIR=/home/runpod/.cache \
               runpod-marimo:smoke-test
             docker exec marimo-ci bash /tests/test-cpu.sh
             docker rm -f marimo-ci
             echo "::endgroup::"
+          }
+          run_suite() {
+            local name="$1"; shift
+            run_suite_raw "$name" -e MARIMO_CACHE_DIR=/home/runpod/.cache "$@"
           }
           run_suite "default (generated token)"
           run_suite "explicit password wins over JUPYTER_PASSWORD" \
@@ -233,3 +238,9 @@ jobs:
             -e MARIMO_TOKEN=poisoned-inbound-value
           run_suite "auth disabled" -e MARIMO_DISABLE_AUTH=true \
             -e MARIMO_TOKEN=poisoned-inbound-value
+          # #50: the default cache root is <workspace>/.cache, so an empty
+          # /workspace stands in for a freshly attached network volume. With
+          # no network at all, marimo must still start from the image's
+          # prewarmed cache rather than re-downloading into the empty one.
+          run_suite_raw "first boot on an empty persistent cache, no network" \
+            --network none
