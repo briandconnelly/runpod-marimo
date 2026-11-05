@@ -7,8 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- CI's smoke-test step now prints the container's exit code, OOM-kill flag and last 100 log lines when a suite fails, so a suite that dies with its container (exit 137) shows why marimo stopped instead of only the exit code.
+
 ### Fixed
 
+- Notebook sandboxes on fresh persistent volumes now reuse the image's prewarmed marimo packages instead of downloading them again, avoiding slow kernel startup and network timeout failures (#116). Startup seeds the volume cache once per image marimo and uv version, placing each entry atomically so an interrupted boot or another pod sharing the cache never sees a partial one; existing entries are never replaced, and notebook dependency isolation is unchanged (a cache makes nothing importable).
 - Pods with volumes that deny ownership changes now start on the first boot when their workspace and cache directories are writable by `runpod` (#115). Failed ownership changes warn and defer to the permission probes, so unusable directories fail immediately with a clear error instead of causing repeated restarts as each cache directory is created.
 
 ## [0.10.0] - 2026-11-05
