@@ -1,7 +1,7 @@
 # runpod-marimo (GPU)
 
 A Docker image that runs [marimo](https://marimo.io) as a notebook server on Runpod GPU pods, served on port **2971** via Runpod's web proxy.
-A CPU variant is published with a `-cpu` tag suffix (e.g., `0.10.0-cpu`).
+A CPU variant is published with a `-cpu` tag suffix (e.g., `0.10.1-cpu`).
 Source: [GitHub](https://github.com/briandconnelly/runpod-marimo) · [Report a bug or request a feature](https://github.com/briandconnelly/runpod-marimo/issues)
 
 ## Host requirements
