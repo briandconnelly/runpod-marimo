@@ -7,7 +7,7 @@ ARG CUDA_BASE_TAG=12.9.2-runtime-ubuntu24.04
 # renovate: datasource=docker depName=ubuntu
 ARG UBUNTU_BASE_TAG=24.04
 # renovate: datasource=docker depName=ghcr.io/astral-sh/uv
-ARG UV_VERSION=0.12.17
+ARG UV_VERSION=0.13.7
 ARG VARIANT=gpu
 
 # Named stage for the uv binary distribution. A named stage is used rather
@@ -31,13 +31,13 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 ARG VARIANT
 ARG IMAGE_DESCRIPTION="Marimo notebook server for Runpod GPU pods"
 # renovate: datasource=python-version depName=python
-ARG PYTHON_VERSION=3.13.15
+ARG PYTHON_VERSION=3.13.18
 # renovate: datasource=pypi depName=marimo
-ARG MARIMO_VERSION=0.24.2
+ARG MARIMO_VERSION=0.25.2
 # renovate: datasource=pypi depName=huggingface_hub
-ARG HUGGINGFACE_HUB_VERSION=1.32.0
+ARG HUGGINGFACE_HUB_VERSION=2.4.0
 # renovate: datasource=pypi depName=ty
-ARG TY_VERSION=0.0.83
+ARG TY_VERSION=0.0.97
 
 LABEL org.opencontainers.image.title="runpod-marimo" \
       org.opencontainers.image.description="${IMAGE_DESCRIPTION}" \
@@ -78,8 +78,8 @@ COPY --from=uv-dist /uv /uvx /usr/local/bin/
 
 # ── GitHub CLI ───────────────────────────────────────────────────────────────
 # renovate: datasource=github-releases depName=cli/cli
-ARG GH_VERSION=v2.101.0
-ARG GH_SHA256=9bca2d1c16825f109907a23307628a2f0698fbf99662b73a5cf0b020293072b8
+ARG GH_VERSION=v2.103.3
+ARG GH_SHA256=4c806978ffce1cec70853302a56d70ac6da4f19bae7adca4e1a8ab00633dd91d
 RUN curl -fsSL "https://github.com/cli/cli/releases/download/${GH_VERSION}/gh_${GH_VERSION#v}_linux_amd64.tar.gz" \
         -o /tmp/gh.tar.gz && \
     echo "${GH_SHA256}  /tmp/gh.tar.gz" | sha256sum -c && \
@@ -89,19 +89,19 @@ RUN curl -fsSL "https://github.com/cli/cli/releases/download/${GH_VERSION}/gh_${
 
 # ── DuckDB CLI ───────────────────────────────────────────────────────────────
 # renovate: datasource=github-releases depName=duckdb/duckdb
-ARG DUCKDB_VERSION=v1.5.5
-ARG DUCKDB_SHA256=08c0ca117111fcede14239d0093792352befdc174218c344d232c13279643d05
-RUN curl -fsSL "https://github.com/duckdb/duckdb/releases/download/${DUCKDB_VERSION}/duckdb_cli-linux-amd64.zip" \
-        -o /tmp/duckdb.zip && \
-    echo "${DUCKDB_SHA256}  /tmp/duckdb.zip" | sha256sum -c && \
-    unzip /tmp/duckdb.zip duckdb -d /usr/local/bin && \
+ARG DUCKDB_VERSION=v2.0.0
+ARG DUCKDB_SHA256=c6507206baf7793c6013dbd82368469a45f20dc0e17a6f92f204602f652ed2bc
+RUN curl -fsSL "https://github.com/duckdb/duckdb/releases/download/${DUCKDB_VERSION}/duckdb-cli-linux-amd64.tar.gz" \
+        -o /tmp/duckdb.tar.gz && \
+    echo "${DUCKDB_SHA256}  /tmp/duckdb.tar.gz" | sha256sum -c && \
+    tar -xzf /tmp/duckdb.tar.gz -C /usr/local/bin duckdb && \
     chmod +x /usr/local/bin/duckdb && \
-    rm /tmp/duckdb.zip
+    rm /tmp/duckdb.tar.gz
 
 # ── runpodctl ────────────────────────────────────────────────────────────────
 # renovate: datasource=github-releases depName=runpod/runpodctl
-ARG RUNPODCTL_VERSION=v2.14.0
-ARG RUNPODCTL_SHA256=2e0fd370a52a0fc7e43a6434a209348a4f6836fcdf1ad2b093b609e938138be9
+ARG RUNPODCTL_VERSION=v3.0.1
+ARG RUNPODCTL_SHA256=b66d11eca8cacbf18a2de6943c6e18a79ffbdc8a3c30aa13a49dc6cfc15d4239
 RUN curl -fsSL "https://github.com/runpod/runpodctl/releases/download/${RUNPODCTL_VERSION}/runpodctl-linux-amd64" \
         -o /usr/local/bin/runpodctl && \
     echo "${RUNPODCTL_SHA256}  /usr/local/bin/runpodctl" | sha256sum -c && \
@@ -129,8 +129,8 @@ RUN curl -fsSL "https://github.com/runpod/runpodctl/releases/download/${RUNPODCT
 # a tiny launcher goes on PATH — the same shape as pi's own installer, which
 # execs the release binary from a managed directory.
 # renovate: datasource=github-releases depName=earendil-works/pi
-ARG PI_VERSION=v0.87.1
-ARG PI_SHA256=80d78dd62d50049a006b981d994c61255bcc10e730b0c278d4ea0a755909764c
+ARG PI_VERSION=v1.5.0
+ARG PI_SHA256=df870ba0e344cb7b3358d8d8f19397b8b8d225a8669784736ad68a5c2169d53b
 ARG PI_LICENSE_SHA256=0457f5bcec3b3b211605dfb5d1a49042fd638f3686a410fe099c24a25af13c48
 # hadolint ignore=SC2016  # the "$@" must reach the launcher unexpanded
 RUN curl -fsSL "https://github.com/earendil-works/pi/releases/download/${PI_VERSION}/pi-linux-x64.tar.gz" \
@@ -149,8 +149,8 @@ RUN curl -fsSL "https://github.com/earendil-works/pi/releases/download/${PI_VERS
 
 # opencode (https://opencode.ai) is a single self-contained binary.
 # renovate: datasource=github-releases depName=anomalyco/opencode
-ARG OPENCODE_VERSION=v1.18.32
-ARG OPENCODE_SHA256=3046e0404fdc60fb80307e7a47824ba07477364178a4d09baa8548496dd6d43b
+ARG OPENCODE_VERSION=v1.19.5
+ARG OPENCODE_SHA256=588310a336fa3b9df36b3f0225b26f679d453efaad0cf3d66c3651ef3ec1647a
 ARG OPENCODE_LICENSE_SHA256=625f0f619133f89bbbb2abe37369613dfa1885eba1e50d02170deb62bb42cb6b
 RUN curl -fsSL "https://github.com/anomalyco/opencode/releases/download/${OPENCODE_VERSION}/opencode-linux-x64.tar.gz" \
         -o /tmp/opencode.tar.gz && \
