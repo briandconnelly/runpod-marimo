@@ -432,12 +432,15 @@ for bucket in "$src"/{archive-v0,wheels-v*,simple-v*,sdists-v*,interpreter-v*}; 
     cp -R -- "$bucket" "$staging/" || exit 1
 done
 cd -- "$staging" || exit 1
-# Move an entry into place unless it exists. Losing a race to another pod
-# seeding the same cache is fine: the winner's entry is identical.
+# Move an entry into place unless one exists. `mv -n` renames with
+# RENAME_NOREPLACE, so an entry another pod's uv publishes after the
+# existence check is kept rather than overwritten (coreutils falls back to
+# check-then-rename only on filesystems without RENAME_NOREPLACE). A skipped
+# move exits nonzero; it is a success when the destination now exists.
 _place() {
     [[ -e "$cache/$1" || -L "$cache/$1" ]] && return 0
     mkdir -p -- "$cache/$(dirname -- "$1")" || return 1
-    mv -T -- "$1" "$cache/$1" 2>/dev/null || [[ -e "$cache/$1" || -L "$cache/$1" ]]
+    mv -n -T -- "$1" "$cache/$1" 2>/dev/null || [[ -e "$cache/$1" || -L "$cache/$1" ]]
 }
 # archive-v0 first, so no wheel symlink is ever moved in ahead of its target.
 # Its entries are immutable, content-addressed directories: move each whole.
