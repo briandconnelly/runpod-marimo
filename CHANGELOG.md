@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.1] - 2026-11-05
+
 ### Changed
 
 - CI's smoke-test step now prints the container's exit code, OOM-kill flag and last 100 log lines when a suite fails, so a suite that dies with its container (exit 137) shows why marimo stopped instead of only the exit code.
