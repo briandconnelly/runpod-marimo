@@ -368,8 +368,10 @@ MARIMO_ARGS="edit --host 0.0.0.0 --port 2971 ${AUTH_FLAG} --sandbox ${WORKSPACE_
 # it was waiting on — so without the inner `exec`, a pod stop would kill
 # the shell and leave marimo running until Docker's SIGKILL deadline,
 # skipping marimo's own shutdown (kernel teardown, autosave). With it,
-# bash execs uvx and uvx execs the tool binary on Unix, so the tree is
-# exactly su(1) -> marimo and the forwarded signal reaches marimo.
-# tests/common.sh asserts that shape.
+# bash execs uv. uv does not exec the tool: its runner spawns marimo and
+# waits, but it forwards SIGTERM (and SIGINT when stdin is not a TTY) to
+# the child precisely for this PID-1/Docker case. So the tree is
+# su(1) -> uv -> marimo with every link forwarding, and the shell — the
+# one non-forwarding link — is gone. tests/common.sh asserts that shape.
 MARIMO_SPEC_Q=$(printf '%q' "marimo[mcp,lsp]==${MARIMO_VERSION}")
 exec su -l runpod -c "cd ${WORKSPACE_Q} && exec uvx ${MARIMO_SPEC_Q} $MARIMO_ARGS"

@@ -85,6 +85,19 @@ _probe_dir_as_runpod() {
 # as_runpod CMD-STRING  — run a shell string as the runpod login user
 as_runpod() { su -l runpod -c "$1"; }
 
+# ancestors_of PID — print the comm of every ancestor of PID up to and
+#   including PID 1, nearest first, one per line.
+ancestors_of() {
+    local pid="$1" ppid
+    while [[ "$pid" -gt 1 ]]; do
+        ppid=$(ps -o ppid= -p "$pid" | tr -d ' ')
+        [[ -n "$ppid" ]] || return 1
+        # procps prints a bare name; BSD ps prints a path. Normalize.
+        basename "$(ps -o comm= -p "$ppid" | tr -d ' ')"
+        pid=$ppid
+    done
+}
+
 # version_major_ge N CMD... — first "vX.Y.Z"/"X.Y.Z" in CMD's output has major >= N
 version_major_ge() {
     local min="$1"; shift
@@ -165,14 +178,22 @@ shared_tests() {
         check "marimo --port 2971"        has_substr "$MARIMO_CMD" '--port 2971'
 
         # Shutdown path. start_marimo.sh execs `su -l runpod -c 'cd ... &&
-        # exec uvx ...'`: su is PID 1 and forwards SIGTERM to its child, and
-        # the inner exec chain (bash -> uvx -> marimo) collapses so that
-        # child IS marimo. Without the inner exec, bash sits between them,
-        # dies on SIGTERM without forwarding it, and marimo is orphaned
-        # until Docker's SIGKILL deadline. Asserting the parent is PID 1 is
-        # the structural check for that.
+        # exec uvx ...'`. Every process between PID 1 and marimo must
+        # forward SIGTERM: su does (util-linux), and uv does (its tool
+        # runner spawns the tool and waits, forwarding SIGTERM/SIGINT —
+        # uv-command-support/src/child.rs, run_to_completion). A shell
+        # does not: a non-interactive bash receiving SIGTERM just exits,
+        # orphaning marimo until Docker's SIGKILL deadline — which is what
+        # the inner `exec` removes. So the expected tree is
+        # su(1) -> uv -> marimo, and the invariant is "no shell in the
+        # ancestry", not a particular depth.
+        local MARIMO_ANCESTORS
+        MARIMO_ANCESTORS=$(ancestors_of "$MARIMO_PID")
         check "PID 1 is su (start script exec'd it)" eq "$(ps -o comm= -p 1 | tr -d ' ')" su
-        check "marimo is a direct child of PID 1"    eq "$(ps -o ppid= -p "$MARIMO_PID" | tr -d ' ')" 1
+        check "no shell between PID 1 and marimo"    not grep -qxE 'bash|sh|dash' <<<"$MARIMO_ANCESTORS"
+        # The uvx binary execs its sibling uv (`uv tool uvx`), so the
+        # parent normally reports as `uv`; accept either name.
+        check "marimo's parent is uv"                grep -qxE 'uvx?' <<<"$(head -1 <<<"$MARIMO_ANCESTORS")"
 
         # Token auth is on by default; --no-token appears only when the pod
         # explicitly opted out with MARIMO_DISABLE_AUTH=true. The resolved
