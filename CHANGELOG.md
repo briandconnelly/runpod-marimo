@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- The [pi](https://pi.dev) (v0.87.1) and [opencode](https://opencode.ai) (v1.18.32) coding-agent CLIs ship preinstalled, both MIT-licensed with their upstream LICENSE files under `/usr/share/licenses/`. Each is the project's standalone Linux x64 release build, pinned and checksum-verified like every other download in the image; the npm route was not viable because the `nodejs` apt package is Node 18 without npm while pi's package requires Node 22.19+, and both projects publish Bun-compiled binaries that need no Node at all. pi's binary loads themes, assets and a wasm module from beside itself, so its tree lives at `/opt/pi` behind a launcher at `/usr/local/bin/pi` (the same shape as pi's own installer); opencode is a single binary at `/usr/local/bin/opencode`. Both agents scan `~/.agents/skills`, so they discover the bundled marimo-pair skill without configuration. Nothing Python-importable is added. Neither release tarball carries a LICENSE, so each is fetched from the same pinned tag as a second checksum-verified download; `scripts/sync-checksums.sh` now understands a `<TOOL>_LICENSE_SHA256` ARG that shares the tool's `<TOOL>_VERSION`, and both projects are covered by the Renovate rule that explains the checksum-repair job.
+- The [pi](https://pi.dev) (v1.5.0) and [opencode](https://opencode.ai) (v1.19.5) coding-agent CLIs ship preinstalled, both MIT-licensed with their upstream LICENSE files under `/usr/share/licenses/`. Each is the project's standalone Linux x64 release build, pinned and checksum-verified like every other download in the image; the npm route was not viable because the `nodejs` apt package is Node 18 without npm while pi's package requires Node 22.19+, and both projects publish Bun-compiled binaries that need no Node at all. pi's binary loads themes, assets and a wasm module from beside itself, so its tree lives at `/opt/pi` behind a launcher at `/usr/local/bin/pi` (the same shape as pi's own installer); opencode is a single binary at `/usr/local/bin/opencode`. Both agents scan `~/.agents/skills`, so they discover the bundled marimo-pair skill without configuration. Nothing Python-importable is added. Neither release tarball carries a LICENSE, so each is fetched from the same pinned tag as a second checksum-verified download; `scripts/sync-checksums.sh` now understands a `<TOOL>_LICENSE_SHA256` ARG that shares the tool's `<TOOL>_VERSION`, and both projects are covered by the Renovate rule that explains the checksum-repair job.
 - Smoke tests execute `pi --version` and `opencode --version` as both `root` and `runpod`, assert the launcher and runtime assets are in place, and check that both LICENSE files shipped.
 
 - `scripts/check-readme-length.sh`, run by CI's `lint` job, fails the build if `README-gpu.md` or `README-cpu.md` exceeds the 5000-character cap on Runpod's pod-template description field. Nothing in the image build reads those files, so an over-length README previously surfaced only when someone tried to publish the template. The check measures bytes rather than characters because a UTF-8 byte count is never below the character count, making it the conservative bound for text that uses em dashes freely.
@@ -17,6 +17,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Condensed the pod-template READMEs (`README-gpu.md`, `README-cpu.md`) to fit Runpod's 5000-character template-description limit (GPU 7544 -> 4896, CPU 6805 -> 4502). No facts were dropped: sections were tightened, the GPU-package note folded into the reproducibility section, the shared-volume `HF_HOME` caveat reduced to one sentence, and a link to the repository README added for the full documentation. `README.md` keeps the long-form text. Tightened again to make room for the pi/opencode entries (GPU now 4978 bytes); the "bring your own agent CLI" wording is gone since two now ship in the image.
+- Updated marimo to 0.25.2.
+- Updated Python to 3.13.18.
+- Updated uv to 0.13.7.
+- Updated huggingface_hub to 2.4.0 (major version).
+- Updated ty to 0.0.97.
+- Updated GitHub CLI to v2.103.3.
+- Updated DuckDB CLI to v2.0.0 (major version). DuckDB 2.0 publishes the Linux CLI as `duckdb-cli-linux-amd64.tar.gz` instead of `duckdb_cli-linux-amd64.zip`, so the install step now extracts a tarball.
+- Updated runpodctl to v3.0.1 (major version).
 
 ### Fixed
 
