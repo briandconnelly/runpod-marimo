@@ -210,6 +210,7 @@ jobs:
         # MARIMO_DISABLE_AUTH, so each branch of the startup script's
         # token resolution gets exercised against a real container.
         run: |
+          source tests/common.sh
           # run_suite_raw takes the docker-run flags verbatim; run_suite
           # adds the ephemeral-cache override most suites use.
           run_suite_raw() {
@@ -219,6 +220,13 @@ jobs:
               -v "$(pwd)/tests:/tests:ro" \
               runpod-marimo:smoke-test
             docker exec marimo-ci bash /tests/test-cpu.sh
+            if [[ "${EXPECT_CHOWN_WARNINGS:-false}" == true ]]; then
+              docker logs marimo-ci > "$RUNNER_TEMP/chown.log" 2>&1
+              for dir in /workspace /workspace/.cache /workspace/.cache/uv /workspace/.cache/huggingface; do
+                check "denied chown warns for $dir" \
+                  grep -qF "Warning: could not chown '$dir' to runpod;" "$RUNNER_TEMP/chown.log"
+              done
+            fi
             docker rm -f marimo-ci
             echo "::endgroup::"
           }
@@ -244,3 +252,25 @@ jobs:
           # prewarmed cache rather than re-downloading into the empty one.
           run_suite_raw "first boot on an empty persistent cache, no network" \
             --network none
+          # #115: dropping CHOWN produces real EPERM errors. umask 000
+          # leaves new root-owned dirs usable by runpod. Supplementary
+          # runpod membership lets root install the root:runpod env file
+          # without CHOWN; disable auth because its token needs a new owner.
+          EXPECT_CHOWN_WARNINGS=true run_suite_raw "denied chown, writable caches" \
+            --cap-drop CHOWN --group-add runpod --tmpfs /workspace:mode=1777 \
+            --entrypoint /tests/start-no-chown.sh -e MARIMO_DISABLE_AUTH=true
+          # With the normal umask, the same failure must reach the probe's
+          # clear error on the first boot rather than dying at the chown,
+          # which is what made each restart create one more directory.
+          docker run -d --name marimo-ci --cap-drop CHOWN \
+            --tmpfs /workspace:mode=1777 --entrypoint /tests/start-no-chown.sh \
+            -e TEST_UMASK=022 -e MARIMO_DISABLE_AUTH=true \
+            -v "$(pwd)/tests:/tests:ro" runpod-marimo:smoke-test
+          check "unwritable cache fails on first boot" eq "$(timeout 30 docker wait marimo-ci)" 1
+          docker logs marimo-ci > "$RUNNER_TEMP/chown.log" 2>&1
+          check "unwritable cache reports the probe error" \
+            grep -qF "Error: UV_CACHE_DIR '/workspace/.cache/uv' is not writable by the runpod user." "$RUNNER_TEMP/chown.log"
+          check "unwritable cache: chown denial is not itself fatal" \
+            not grep -qF "Error: failed to chown" "$RUNNER_TEMP/chown.log"
+          docker rm -f marimo-ci
+          summary
