@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- GPU pods whose volume denies ownership changes and creates directories with root's umask (Runpod's NFS-backed pod volumes, e.g. CA-MTL-1) start again (#115). 0.10.1 stopped them with `UV_CACHE_DIR '/workspace/.cache/uv' is not writable by the runpod user` on every boot, because the cache directories startup created were `root:root 0755`. When `chown` is denied on a directory startup just created, it now makes the directory world-writable (`1777`, sticky like `/tmp`) and warns. Pre-existing directories are still left alone, and the writability probes still run.
+
 ## [0.10.1] - 2026-11-05
 
 ### Changed
