@@ -233,6 +233,13 @@ jobs:
                   grep -qF "Warning: could not chown '$dir' to runpod;" "$RUNNER_TEMP/chown.log"
               done
             fi
+            if [[ "${EXPECT_CHMOD_FALLBACK:-false}" == true ]]; then
+              for dir in /workspace/.cache /workspace/.cache/uv /workspace/.cache/huggingface; do
+                check "denied chown falls back to chmod for $dir" \
+                  grep -qF "Warning: could not chown '$dir' to runpod; made it world-writable (mode 1777) instead." "$RUNNER_TEMP/chown.log"
+                check "$dir is mode 1777" eq "$(docker exec marimo-ci stat -c %a "$dir")" 1777
+              done
+            fi
             docker rm -f marimo-ci
             echo "::endgroup::"
           }
@@ -266,12 +273,22 @@ jobs:
           EXPECT_CHOWN_WARNINGS=true run_suite_raw "denied chown, writable caches" \
             --cap-drop CHOWN --group-add runpod --tmpfs /workspace:mode=1777 \
             --entrypoint /tests/start-no-chown.sh -e MARIMO_DISABLE_AUTH=true
-          # With the normal umask, the same failure must reach the probe's
-          # clear error on the first boot rather than dying at the chown,
-          # which is what made each restart create one more directory.
+          # With the normal umask, new directories come out root-owned 0755,
+          # as on Runpod's NFS pod volumes. Startup must chmod them 1777 so
+          # marimo still starts on the first boot.
+          EXPECT_CHOWN_WARNINGS=true EXPECT_CHMOD_FALLBACK=true \
+            run_suite_raw "denied chown, umask 022 (NFS-like) caches" \
+            --cap-drop CHOWN --group-add runpod --tmpfs /workspace:mode=1777 \
+            --entrypoint /tests/start-no-chown.sh -e TEST_UMASK=022 \
+            -e MARIMO_DISABLE_AUTH=true
+          # A pre-existing cache directory runpod cannot write is left alone,
+          # so it must reach the probe's clear error on the first boot rather
+          # than dying at the chown, which is what made each restart create
+          # one more directory.
           docker run -d --name marimo-ci --cap-drop CHOWN \
             --tmpfs /workspace:mode=1777 --entrypoint /tests/start-no-chown.sh \
-            -e TEST_UMASK=022 -e MARIMO_DISABLE_AUTH=true \
+            -e TEST_UMASK=022 -e TEST_PRECREATE_UNWRITABLE=/workspace/.cache/uv \
+            -e MARIMO_DISABLE_AUTH=true \
             -v "$(pwd)/tests:/tests:ro" runpod-marimo:smoke-test
           check "unwritable cache fails on first boot" eq "$(timeout 30 docker wait marimo-ci)" 1
           docker logs marimo-ci > "$RUNNER_TEMP/chown.log" 2>&1

@@ -114,8 +114,8 @@ _validate_path_var() {
 [[ -n "${HF_HOME:-}" ]] && _validate_path_var HF_HOME "$HF_HOME"
 
 # Ensure a directory exists and try to give the runpod user ownership.
-# A denied chown only warns: the probes below decide whether runpod can
-# use the paths. Only chowns directories we created on this boot, to avoid
+# A denied chown on a new directory falls back to chmod 1777 and warns:
+# the probes below decide whether runpod can use the paths. Only chowns directories we created on this boot, to avoid
 # changing ownership of a pre-existing user-supplied path (e.g. a populated
 # volume subdir).
 # Special case: /workspace itself is always chown'd because Runpod mounts
@@ -134,9 +134,19 @@ _ensure_runpod_dir() {
             echo "Error: failed to create '$dir'." >&2
             exit 1
         }
-        chown runpod:runpod "$dir" || {
-            echo "Warning: could not chown '$dir' to runpod; checking directory permissions below." >&2
-        }
+        # Some volumes deny chown but honor root's umask, so the new
+        # directory is root-owned 0755 and unusable by runpod (Runpod's
+        # NFS-backed pod volumes do; its MooseFS ones create every
+        # directory 0777). Root can still chmod a directory it owns, so
+        # open this one up instead. Sticky, like /tmp. The probes below
+        # still decide whether runpod can use it.
+        if ! chown runpod:runpod "$dir"; then
+            if chmod 1777 "$dir"; then
+                echo "Warning: could not chown '$dir' to runpod; made it world-writable (mode 1777) instead." >&2
+            else
+                echo "Warning: could not chown '$dir' to runpod; checking directory permissions below." >&2
+            fi
+        fi
     fi
 }
 
