@@ -124,7 +124,7 @@ RUN curl -fsSL "https://github.com/runpod/runpodctl/releases/download/${RUNPODCT
 # notebook cannot import it. The tarball carries its LICENSE, shipped under
 # /usr/share/licenses/node because this image is published publicly.
 # renovate: datasource=node-version depName=node
-ARG NODE_VERSION=v26.13.0
+ARG NODE_VERSION=26.13.1
 ARG NODE_SHA256=5848553868b402d3fabb5b09270649977780a390f832155721025a08b5104455
 RUN curl -fsSL "https://nodejs.org/dist/${NODE_VERSION}/node-${NODE_VERSION}-linux-x64.tar.gz" \
         -o /tmp/node.tar.gz && \
