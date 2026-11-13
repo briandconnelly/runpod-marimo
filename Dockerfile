@@ -124,16 +124,16 @@ RUN curl -fsSL "https://github.com/runpod/runpodctl/releases/download/${RUNPODCT
 # notebook cannot import it. The tarball carries its LICENSE, shipped under
 # /usr/share/licenses/node because this image is published publicly.
 # renovate: datasource=node-version depName=node
-ARG NODE_VERSION=v26.13.0
-ARG NODE_SHA256=5848553868b402d3fabb5b09270649977780a390f832155721025a08b5104455
-RUN curl -fsSL "https://nodejs.org/dist/${NODE_VERSION}/node-${NODE_VERSION}-linux-x64.tar.gz" \
+ARG NODE_VERSION=26.13.1
+ARG NODE_SHA256=518674de2b621728a5e4486f5fb3b7d2900bb3cc4aa97969edaa463db99f9778
+RUN curl -fsSL "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.gz" \
         -o /tmp/node.tar.gz && \
     echo "${NODE_SHA256}  /tmp/node.tar.gz" | sha256sum -c && \
     mkdir -p /usr/share/licenses/node && \
     tar -xzf /tmp/node.tar.gz -C /usr/local/bin --strip-components=2 \
-        "node-${NODE_VERSION}-linux-x64/bin/node" && \
+        "node-v${NODE_VERSION}-linux-x64/bin/node" && \
     tar -xzf /tmp/node.tar.gz -C /usr/share/licenses/node --strip-components=1 \
-        "node-${NODE_VERSION}-linux-x64/LICENSE" && \
+        "node-v${NODE_VERSION}-linux-x64/LICENSE" && \
     rm /tmp/node.tar.gz && \
     chmod 755 /usr/local/bin/node && \
     node --version
