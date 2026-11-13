@@ -125,7 +125,7 @@ RUN curl -fsSL "https://github.com/runpod/runpodctl/releases/download/${RUNPODCT
 # /usr/share/licenses/node because this image is published publicly.
 # renovate: datasource=node-version depName=node
 ARG NODE_VERSION=26.13.1
-ARG NODE_SHA256=5848553868b402d3fabb5b09270649977780a390f832155721025a08b5104455
+ARG NODE_SHA256=518674de2b621728a5e4486f5fb3b7d2900bb3cc4aa97969edaa463db99f9778
 RUN curl -fsSL "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.gz" \
         -o /tmp/node.tar.gz && \
     echo "${NODE_SHA256}  /tmp/node.tar.gz" | sha256sum -c && \
