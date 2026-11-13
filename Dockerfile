@@ -7,7 +7,7 @@ ARG CUDA_BASE_TAG=12.9.2-runtime-ubuntu24.04
 # renovate: datasource=docker depName=ubuntu
 ARG UBUNTU_BASE_TAG=24.04
 # renovate: datasource=docker depName=ghcr.io/astral-sh/uv
-ARG UV_VERSION=0.13.7
+ARG UV_VERSION=0.13.8
 ARG VARIANT=gpu
 
 # Named stage for the uv binary distribution. A named stage is used rather
@@ -37,7 +37,7 @@ ARG MARIMO_VERSION=0.25.2
 # renovate: datasource=pypi depName=huggingface_hub
 ARG HUGGINGFACE_HUB_VERSION=2.4.0
 # renovate: datasource=pypi depName=ty
-ARG TY_VERSION=0.0.98
+ARG TY_VERSION=0.0.103
 
 LABEL org.opencontainers.image.title="runpod-marimo" \
       org.opencontainers.image.description="${IMAGE_DESCRIPTION}" \
@@ -81,8 +81,8 @@ COPY --from=uv-dist /uv /uvx /usr/local/bin/
 
 # ── GitHub CLI ───────────────────────────────────────────────────────────────
 # renovate: datasource=github-releases depName=cli/cli
-ARG GH_VERSION=v2.103.3
-ARG GH_SHA256=4c806978ffce1cec70853302a56d70ac6da4f19bae7adca4e1a8ab00633dd91d
+ARG GH_VERSION=v2.104.0
+ARG GH_SHA256=98cb101ad87dbbd3f6b2f2bfcbd43197ccd07643140121d8a9cfaa91eadbc24e
 RUN curl -fsSL "https://github.com/cli/cli/releases/download/${GH_VERSION}/gh_${GH_VERSION#v}_linux_amd64.tar.gz" \
         -o /tmp/gh.tar.gz && \
     echo "${GH_SHA256}  /tmp/gh.tar.gz" | sha256sum -c && \
@@ -103,8 +103,8 @@ RUN curl -fsSL "https://github.com/duckdb/duckdb/releases/download/${DUCKDB_VERS
 
 # ── runpodctl ────────────────────────────────────────────────────────────────
 # renovate: datasource=github-releases depName=runpod/runpodctl
-ARG RUNPODCTL_VERSION=v3.0.1
-ARG RUNPODCTL_SHA256=b66d11eca8cacbf18a2de6943c6e18a79ffbdc8a3c30aa13a49dc6cfc15d4239
+ARG RUNPODCTL_VERSION=v3.1.1
+ARG RUNPODCTL_SHA256=ae0a2e5ff723c8fceb609e7120dfcaa4d681bf3015adc74141812a21f2bb9486
 RUN curl -fsSL "https://github.com/runpod/runpodctl/releases/download/${RUNPODCTL_VERSION}/runpodctl-linux-amd64" \
         -o /usr/local/bin/runpodctl && \
     echo "${RUNPODCTL_SHA256}  /usr/local/bin/runpodctl" | sha256sum -c && \
@@ -160,8 +160,8 @@ RUN curl -fsSL "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-l
 # a tiny launcher goes on PATH — the same shape as pi's own installer, which
 # execs the release binary from a managed directory.
 # renovate: datasource=github-releases depName=earendil-works/pi
-ARG PI_VERSION=v1.5.0
-ARG PI_SHA256=df870ba0e344cb7b3358d8d8f19397b8b8d225a8669784736ad68a5c2169d53b
+ARG PI_VERSION=v1.5.2
+ARG PI_SHA256=811c6f2c9e7aaee252b5404252e556fb713aa209c1f7f924226aa77d4ef70cb5
 ARG PI_LICENSE_SHA256=0457f5bcec3b3b211605dfb5d1a49042fd638f3686a410fe099c24a25af13c48
 # hadolint ignore=SC2016  # the "$@" must reach the launcher unexpanded
 RUN curl -fsSL "https://github.com/earendil-works/pi/releases/download/${PI_VERSION}/pi-linux-x64.tar.gz" \
@@ -180,8 +180,8 @@ RUN curl -fsSL "https://github.com/earendil-works/pi/releases/download/${PI_VERS
 
 # opencode (https://opencode.ai) is a single self-contained binary.
 # renovate: datasource=github-releases depName=anomalyco/opencode
-ARG OPENCODE_VERSION=v2.2.5
-ARG OPENCODE_SHA256=09f44302c10fd036912f59c81fd1aef5df45dd06f649197f9dfc9bbe2a79614e
+ARG OPENCODE_VERSION=v2.3.0
+ARG OPENCODE_SHA256=fc0f81522aceeabac47693d88389efa2bc517ce74c2c38fd6967819fcc6e4d3b
 ARG OPENCODE_LICENSE_SHA256=625f0f619133f89bbbb2abe37369613dfa1885eba1e50d02170deb62bb42cb6b
 RUN curl -fsSL "https://github.com/anomalyco/opencode/releases/download/${OPENCODE_VERSION}/opencode-linux-x64.tar.gz" \
         -o /tmp/opencode.tar.gz && \
