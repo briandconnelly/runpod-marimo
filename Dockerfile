@@ -56,6 +56,9 @@ ENV PYTHONUNBUFFERED=1
 # libatomic1 is the one shared library the upstream Node binary (below)
 # needs that the Ubuntu base image does not ship; everything else it links
 # (libstdc++, libgcc_s, libm, libdl, libpthread) is already present.
+# The host keys openssh-server's postinst generates are deleted: baked in,
+# every pod pulling this public image would share them. start_marimo.sh
+# generates per-pod keys when PUBLIC_KEY is set.
 RUN apt-get update --yes && \
     DEBIAN_FRONTEND=noninteractive apt-get install --yes --no-install-recommends \
         ca-certificates \
@@ -72,6 +75,7 @@ RUN apt-get update --yes && \
         DEBIAN_FRONTEND=noninteractive apt-get install --yes --no-install-recommends nvtop && \
         rm -f /cuda-keyring_1.1-1_all.deb; \
     fi \
+    && rm -f /etc/ssh/ssh_host_* \
     && rm -rf /var/lib/apt/lists/*
 
 # ── uv ───────────────────────────────────────────────────────────────────────
