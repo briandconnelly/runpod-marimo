@@ -15,6 +15,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - The token file is now created as the `runpod` user instead of by root with `install -o runpod`, so startup no longer needs `CAP_CHOWN` to enable auth. CI's denied-chown suites now run with auth on; a new suite checks that `MARIMO_DISABLE_AUTH=true` refuses to start and that `MARIMO_DISABLE_AUTH=false` boots normally.
 - The release workflow now pushes the CPU image it smoke-tested, built in the same job on the same builder, instead of an independent rebuild on another runner that could pick up different upstream packages. The GPU image is built and pushed only after the CPU job passes.
+- GitHub Actions in every workflow are pinned to full commit SHAs (with the tag in a comment) instead of movable version tags, so a retagged or compromised action cannot change what runs, including in the job that can push images. Renovate keeps the pins current.
+- CI runs on a pull request now cancel any earlier run for the same PR, cache-warm runs on `main` cancel superseded ones, and release runs queue rather than cancel so a release never publishes only some variant tags. Every job now has a timeout, so a hung build fails instead of holding a runner for six hours.
 
 ### Fixed
 
