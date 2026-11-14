@@ -80,6 +80,11 @@ shellcheck -x -P SCRIPTDIR start_marimo.sh scripts/*.sh tests/*.sh
 hadolint Dockerfile
 ```
 
+`tests/ci-suites.sh <image>` is the local equivalent of CI's smoke-test job: build the CPU image (`docker build --build-arg VARIANT=cpu -t runpod-marimo:smoke-test .`), then run it against that tag.
+It covers every startup branch CI does (token sources, caches and volumes, path validation, hooks, SSH, version override, clean stop), and exits non-zero on any failure.
+
+When validating the GPU image on a live pod before a release, also confirm that PID 1 is `tini` (`ps -o comm= -p 1`).
+
 Do not hand-edit the `_SHA256` ARGs in the Dockerfile when bumping a tool's version.
 Change the `_VERSION` ARG only; CI's `checksums` job recomputes the hash and commits it to the branch.
 Run `scripts/sync-checksums.sh --base origin/main` locally if you want the same fix before pushing; `--base` is the tag-mutation interlock, so always pass it when rewriting pins.
