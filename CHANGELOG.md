@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- The image no longer ships SSH host private keys. Every image through 0.10.2 carried the host keys openssh-server generated at build time, so all pods running the same public tag shared them, and anyone could pull the image and impersonate a pod's SSH server. Keys are now generated at startup when `PUBLIC_KEY` is set and no key exists yet. They live in the container filesystem, so they survive a restart of the same container but are regenerated whenever the container is recreated; on Runpod that includes every pod stop/start, because the Container Disk is reset. Each regeneration makes SSH clients that saved the previous key report that the host key changed, so expect that warning after every such start, not just once after upgrading.
+- The marimo access token no longer appears on `jq`'s command line while startup URL-encodes it for the proxy link in the pod logs; it reaches `jq` on stdin, so it is never visible in `ps` or `/proc/<pid>/cmdline`.
+
 ### Removed
 
 - The `MARIMO_DISABLE_AUTH` opt-out. Token authentication is now always on, because Runpod's web proxy authenticates nothing and an unauthenticated marimo editor gives anyone with the pod's proxy URL arbitrary code execution. A pod that sets `MARIMO_DISABLE_AUTH` to anything other than `false` (the old documented default, still present in existing templates) now stops at startup with an error rather than silently ignoring it; unset it, and set `MARIMO_TOKEN_PASSWORD` for a fixed password.
