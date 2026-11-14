@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-11-14
+
 ### Security
 
 - The image no longer ships SSH host private keys. Every image through 0.10.2 carried the host keys openssh-server generated at build time, so all pods running the same public tag shared them, and anyone could pull the image and impersonate a pod's SSH server. Keys are now generated at startup when `PUBLIC_KEY` is set and no key exists yet. They live in the container filesystem, so they survive a restart of the same container but are regenerated whenever the container is recreated; on Runpod that includes every pod stop/start, because the Container Disk is reset. Each regeneration makes SSH clients that saved the previous key report that the host key changed, so expect that warning after every such start, not just once after upgrading.
@@ -30,6 +32,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The release workflow now pushes the CPU image it smoke-tested, built in the same job on the same builder, instead of an independent rebuild on another runner that could pick up different upstream packages. The GPU image is built and pushed only after the CPU job passes.
 - GitHub Actions in every workflow are pinned to full commit SHAs (with the tag in a comment) instead of movable version tags, so a retagged or compromised action cannot change what runs, including in the job that can push images. Renovate keeps the pins current.
 - CI runs on a pull request now cancel any earlier run for the same PR, cache-warm runs on `main` cancel superseded ones, and release runs queue rather than cancel so a release never publishes only some variant tags. Every job now has a timeout, so a hung build fails instead of holding a runner for six hours.
+- Updated uv to 0.13.8.
+- Updated ty to 0.0.104.
+- Updated GitHub CLI to v2.104.0.
+- Updated runpodctl to v3.1.1.
+- Updated Node.js to v26.13.1.
+- Updated pi to v1.5.2.
+- Updated opencode to v2.3.0.
 
 ### Fixed
 
