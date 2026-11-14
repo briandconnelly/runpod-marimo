@@ -16,6 +16,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `gh`, DuckDB and `runpodctl` now ship their upstream LICENSE under `/usr/share/licenses/<tool>/`, as the image is published publicly; the DuckDB and `runpodctl` licenses are pinned, checksum-verified downloads from the same tag as the tool. The smoke tests now execute all three (`--version`) as both `root` and `runpod` instead of only checking they are on `PATH`.
 - `tests/ci-suites.sh <image>` runs CI's whole smoke-test job against a local image. It adds suites for SSH (`PUBLIC_KEY` with two keys, then a real `ssh` login), the `/pre_start.sh` and `/post_start.sh` hooks, `MARIMO_WORKSPACE` path validation, a `MARIMO_VERSION` override, and a clean `docker stop`. Every suite now also checks that a notebook sandbox declaring only marimo cannot import `huggingface_hub`, `pandas`, `polars`, `torch`, `matplotlib` or `scipy`, or see a uv tool environment.
+- `README.md` documents the `/pre_start.sh` and `/post_start.sh` startup hooks, `PUBLIC_KEY` SSH setup, and the `MARIMO_VERSION` override, which the image already supported but never described: when each step runs, as which user, and whether a failure aborts startup.
+- An MIT `LICENSE` file. The repository previously stated no license, so the Dockerfile and scripts had no explicit terms for reuse.
 
 ### Removed
 
@@ -36,6 +38,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `scripts/sync-checksums.sh` now prints `error: no download URL in Dockerfile referencing ...` when a pinned version has no matching download URL, instead of exiting 1 with no message.
 - `hf` and `ty` now work in every shell, including `docker exec` and other non-login shells, because `/home/runpod/.local/bin` is on the container `PATH`. Interactive non-login shells (the Runpod web terminal, SSH, `docker exec -it`) now also load the pod environment, so `UV_CACHE_DIR`, `HF_HOME` and forwarded pod env vars point where marimo's do instead of to uv's and Hugging Face's defaults. A non-interactive `bash -c` still gets only the container environment.
 - Orphaned processes are now reaped. `tini` runs as PID 1 (the start script re-execs itself under it), so processes left behind by terminals and coding agents no longer accumulate as zombies; before, PID 1 was `su`, which never reaps them. `docker stop` still reaches marimo through `tini`.
+- `README.md` told users to log in to Hugging Face with `huggingface-cli login`; the bundled huggingface_hub 2.x CLI is `hf`, so it now says `hf auth login`.
 
 ## [0.10.2] - 2026-11-05
 
