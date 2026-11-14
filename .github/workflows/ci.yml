@@ -345,8 +345,11 @@ jobs:
           SMOKE_TEST: ${{ needs.smoke-test.result }}
         run: |
           post() {
+            # A repair always changes the Dockerfile, so every job must
+            # have run. "skipped" here means an upstream job failed (or
+            # classification broke), never a legitimate docs-only skip.
             local job="$1" result="$2" state=failure
-            case "$result" in success|skipped) state=success ;; esac
+            [[ "$result" == success ]] && state=success
             gh api --method POST "repos/$REPO/statuses/$SHA" \
               -f state="$state" -f context="ci/$job" -f target_url="$RUN_URL" \
               -f description="$job: $result (from the run that pushed this commit)"

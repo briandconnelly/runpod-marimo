@@ -9,10 +9,15 @@ env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
 
-# Never cancel a release in flight: that could leave only some of a
-# version's variant tags published.
+# One release at a time, never cancelled in flight. Releases share the
+# minor aliases (0.10, 0.10-cpu, ...), so two tags publishing at once could
+# interleave their CPU and GPU pushes and leave those aliases pointing at
+# different versions; cancelling could leave only some variant tags
+# published. GitHub keeps at most one run pending per group, so tag one
+# release at a time: a third tag pushed while one runs and one waits
+# replaces the waiting run, which must then be re-run.
 concurrency:
-  group: publish-${{ github.ref }}
+  group: publish
   cancel-in-progress: false
 
 jobs:
