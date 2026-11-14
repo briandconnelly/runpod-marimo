@@ -172,7 +172,7 @@ shared_tests() {
     # boot against an empty persistent cache, and that was observed to take
     # >6 min on a shared host under load. Retry until a ~10-min deadline.
     check "health endpoint 2xx on :2971" wait_for_health 600
-boundary end-to-end: the API must reject
+    # Verify the auth boundary end-to-end: the API must reject
     # unauthenticated requests and accept the resolved token.
     # --data-urlencode with -G reads the token from the file and
     # URL-encodes it, so user-chosen passwords with special
@@ -181,6 +181,7 @@ boundary end-to-end: the API must reject
         eq "$(http_code http://localhost:2971/api/status)" 401
     check "API accepts the resolved token" \
         eq "$(http_code http://localhost:2971/api/status -G --data-urlencode access_token@/home/runpod/.config/marimo/token)" 200
+
     section "Marimo process"
     local MARIMO_PID MARIMO_USER MARIMO_CMD MARIMO_WS
     MARIMO_PID=$(pgrep -f 'bin/marimo edit' | head -1 || true)
@@ -233,6 +234,7 @@ boundary end-to-end: the API must reject
             check "token file matches JUPYTER_PASSWORD fallback" \
                 eq "$(cat "$TOKEN_FILE")" "$JUPYTER_PASSWORD"
         fi
+
         # The workspace path is the last positional argument to marimo
         # edit. Read it from /proc/PID/cmdline (NUL-separated, verbatim)
         # rather than `ps -o args`, which reconstructs the command line
@@ -387,7 +389,7 @@ boundary end-to-end: the API must reject
     # The auth boundary itself is already covered by the 401/200 checks in
     # the HTTP endpoint section above; this asserts the skill's own script
     # picks up the exported token, which those cannot see.
-/tmp/marimo-pair-probe.out
+    local PAIR_OUT=/tmp/marimo-pair-probe.out
     local PAIR_OUT_NOTOKEN=/tmp/marimo-pair-probe-notoken.out
     as_runpod "bash $SKILL_DIR/scripts/execute-code.sh --url http://localhost:2971 -c pass" \
         > "$PAIR_OUT" 2>&1 || true
@@ -400,6 +402,7 @@ boundary end-to-end: the API must reject
         > "$PAIR_OUT_NOTOKEN" 2>&1 || true
     check "execute-code.sh is rejected without a token" \
         grep -qF 'Failed to connect' "$PAIR_OUT_NOTOKEN"
+
     section "Coding agents"
     # pi and opencode are pinned standalone release binaries. Both are
     # Bun-compiled; pi's loads themes, assets and a wasm module from
@@ -465,6 +468,7 @@ boundary end-to-end: the API must reject
         check "$u interactive shell MARIMO_TOKEN matches the token file" \
             cmp -s "/tmp/tok-inter-$u" "$TOKFILE"
     done
+
     section "User and permissions"
     check "runpod user exists"            id runpod
     check "home owned by runpod"          eq "$(stat -c %U /home/runpod)" runpod
