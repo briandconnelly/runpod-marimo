@@ -161,3 +161,8 @@ docker build -t runpod-marimo:cpu \
   --build-arg VARIANT=cpu \
   --build-arg "IMAGE_DESCRIPTION=Marimo notebook server for Runpod CPU pods" .
 ```
+
+## License
+
+The code in this repository is released under the [MIT License](LICENSE).
+The published images also contain third-party software under its own licenses.

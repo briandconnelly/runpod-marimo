@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `gh`, DuckDB and `runpodctl` now ship their upstream LICENSE under `/usr/share/licenses/<tool>/`, as the image is published publicly; the DuckDB and `runpodctl` licenses are pinned, checksum-verified downloads from the same tag as the tool. The smoke tests now execute all three (`--version`) as both `root` and `runpod` instead of only checking they are on `PATH`.
 - `tests/ci-suites.sh <image>` runs CI's whole smoke-test job against a local image. It adds suites for SSH (`PUBLIC_KEY` with two keys, then a real `ssh` login), the `/pre_start.sh` and `/post_start.sh` hooks, `MARIMO_WORKSPACE` path validation, a `MARIMO_VERSION` override, and a clean `docker stop`. Every suite now also checks that a notebook sandbox declaring only marimo cannot import `huggingface_hub`, `pandas`, `polars`, `torch`, `matplotlib` or `scipy`, or see a uv tool environment.
 - `README.md` documents the `/pre_start.sh` and `/post_start.sh` startup hooks, `PUBLIC_KEY` SSH setup, and the `MARIMO_VERSION` override, which the image already supported but never described: when each step runs, as which user, and whether a failure aborts startup.
+- An MIT `LICENSE` file. The repository previously stated no license, so the Dockerfile and scripts had no explicit terms for reuse.
 
 ### Removed
 
