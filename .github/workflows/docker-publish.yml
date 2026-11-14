@@ -9,36 +9,66 @@ env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
 
+# One release at a time, never cancelled in flight. Releases share the
+# minor aliases (0.10, 0.10-cpu, ...), so two tags publishing at once could
+# interleave their CPU and GPU pushes and leave those aliases pointing at
+# different versions; cancelling could leave only some variant tags
+# published. GitHub keeps at most one run pending per group, so tag one
+# release at a time: a third tag pushed while one runs and one waits
+# replaces the waiting run, which must then be re-run.
+concurrency:
+  group: publish
+  cancel-in-progress: false
+
 jobs:
-  validate:
+  # Build, smoke-test and push the CPU image in one job, so the image
+  # pushed is the one that was tested: the push step repeats the load
+  # step's inputs exactly, on the same builder, so every layer comes from
+  # that builder's cache instead of an independent rebuild on another
+  # runner. GitHub has no GPU runners, so the GPU image is validated by
+  # hand before release (see AGENTS.md) and only pushed after CPU passes.
+  cpu:
     runs-on: ubuntu-latest
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-    timeout-minutes: 20
+    timeout-minutes: 60
     permissions:
       contents: read
+      packages: write
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
 
-      - name: Build CPU image for validation
-        uses: docker/build-push-action@v7
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=semver,pattern={{version}},suffix=-cpu
+            type=semver,pattern={{major}}.{{minor}},suffix=-cpu
+
+      - name: Build CPU image for the smoke test
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
         with:
           context: .
           push: false
           load: true
           platforms: linux/amd64
           tags: runpod-marimo:validate
+          labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             VARIANT=cpu
             IMAGE_DESCRIPTION=Marimo notebook server for Runpod CPU pods
+            IMAGE_VERSION=${{ steps.meta.outputs.version }}
           # Restores the default-branch cache written by cache-warm.yml —
           # tag runs cannot see PR-scoped caches, only main's.
           cache-from: type=gha,scope=cpu
+          cache-to: type=gha,mode=max,scope=cpu
 
       - name: Run CPU smoke tests
         run: |
@@ -49,55 +79,18 @@ jobs:
           docker exec marimo-validate bash /tests/test-cpu.sh
           docker rm -f marimo-validate
 
-  build-and-push:
-    runs-on: ubuntu-latest
-    needs: validate
-    env:
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-    permissions:
-      contents: read
-      packages: write
-
-    strategy:
-      fail-fast: true
-      matrix:
-        include:
-          - variant: gpu
-            description: "Marimo notebook server for Runpod GPU pods"
-            tags: |
-              type=semver,pattern={{version}}
-              type=semver,pattern={{major}}.{{minor}}
-              type=semver,pattern={{version}},suffix=-gpu
-              type=semver,pattern={{major}}.{{minor}},suffix=-gpu
-          - variant: cpu
-            description: "Marimo notebook server for Runpod CPU pods"
-            tags: |
-              type=semver,pattern={{version}},suffix=-cpu
-              type=semver,pattern={{major}}.{{minor}},suffix=-cpu
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v7
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
-
       - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v4
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract metadata
-        id: meta
-        uses: docker/metadata-action@v6
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          tags: ${{ matrix.tags }}
-
-      - name: Build and push Docker image (${{ matrix.variant }})
-        uses: docker/build-push-action@v7
+      # Same context, platform, labels, build-args and cache as the build
+      # above; only the tags and push differ, so the builder reuses the
+      # tested layers rather than rebuilding them.
+      - name: Push the tested CPU image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
         with:
           context: .
           push: true
@@ -105,8 +98,57 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
-            VARIANT=${{ matrix.variant }}
-            IMAGE_DESCRIPTION=${{ matrix.description }}
+            VARIANT=cpu
+            IMAGE_DESCRIPTION=Marimo notebook server for Runpod CPU pods
             IMAGE_VERSION=${{ steps.meta.outputs.version }}
-          cache-from: type=gha,scope=${{ matrix.variant }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.variant }}
+          cache-from: type=gha,scope=cpu
+
+  gpu:
+    runs-on: ubuntu-latest
+    needs: cpu
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{version}},suffix=-gpu
+            type=semver,pattern={{major}}.{{minor}},suffix=-gpu
+
+      - name: Build and push Docker image (gpu)
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
+        with:
+          context: .
+          push: true
+          platforms: linux/amd64
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            VARIANT=gpu
+            IMAGE_DESCRIPTION=Marimo notebook server for Runpod GPU pods
+            IMAGE_VERSION=${{ steps.meta.outputs.version }}
+          cache-from: type=gha,scope=gpu
+          cache-to: type=gha,mode=max,scope=gpu

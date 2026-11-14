@@ -9,6 +9,11 @@ on:
   pull_request:
     branches: [main]
 
+# A new push to a PR supersedes the run on its previous head.
+concurrency:
+  group: ci-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
 jobs:
   # Renovate bumps a tool's *_VERSION ARG but cannot recompute its *_SHA256
   # sibling, so those PRs arrive with a stale checksum and die on the
@@ -17,17 +22,21 @@ jobs:
   # every later rebuild is still locked to the bytes reviewed on this PR.
   checksums:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     permissions:
       contents: write
     outputs:
       ref: ${{ steps.sync.outputs.ref }}
+      # true only when this run pushed a checksum fix; that commit carries
+      # [skip ci], so report-repaired-head posts this run's results on it.
+      repaired: ${{ steps.sync.outputs.repaired }}
       code_changed: ${{ steps.changes.outputs.code_changed }}
 
     steps:
       - name: Checkout pull request branch
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           repository: ${{ github.event.pull_request.head.repo.full_name }}
           ref: ${{ github.event.pull_request.head.ref }}
@@ -62,6 +71,7 @@ jobs:
             git commit -m "chore: sync pinned download checksums [skip ci]" -- Dockerfile
             git push
             echo "::notice::Refreshed stale download checksums and pushed the fix."
+            echo "repaired=true" >>"$GITHUB_OUTPUT"
           fi
 
           echo "ref=$(git rev-parse HEAD)" >>"$GITHUB_OUTPUT"
@@ -91,6 +101,7 @@ jobs:
   # Lints the tree as the checksums job left it, same as build/smoke-test.
   lint:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     needs: checksums
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -99,7 +110,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           repository: ${{ github.event.pull_request.head.repo.full_name }}
           ref: ${{ needs.checksums.outputs.ref }}
@@ -110,7 +121,7 @@ jobs:
         run: shellcheck -x -P SCRIPTDIR start_marimo.sh scripts/*.sh tests/*.sh
 
       - name: hadolint
-        uses: hadolint/hadolint-action@v3.5.0
+        uses: hadolint/hadolint-action@06be81baf89a55ffd0e24b8f04a4185738dd3387 # v3.5.0
         with:
           dockerfile: Dockerfile
 
@@ -127,6 +138,7 @@ jobs:
     # Skipped (not absent) on docs-only PRs so a required check still
     # reports a conclusion branch protection accepts.
     if: needs.checksums.outputs.code_changed == 'true'
+    timeout-minutes: 45
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     permissions:
@@ -144,7 +156,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           # Build the branch head as the checksums job left it, so a green
           # check always corresponds to the tree that gets merged.
@@ -152,10 +164,10 @@ jobs:
           ref: ${{ needs.checksums.outputs.ref }}
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
 
       - name: Build Docker image (${{ matrix.variant }})
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
         with:
           context: .
           push: false
@@ -181,7 +193,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           # Build the branch head as the checksums job left it, so a green
           # check always corresponds to the tree that gets merged.
@@ -189,10 +201,10 @@ jobs:
           ref: ${{ needs.checksums.outputs.ref }}
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
 
       - name: Build CPU image for smoke test
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
         with:
           context: .
           push: false
@@ -207,3 +219,41 @@ jobs:
       - name: Run CPU smoke tests
         # Every suite lives in tests/ci-suites.sh so it can run locally too.
         run: tests/ci-suites.sh runpod-marimo:smoke-test
+
+  # The checksum fix is pushed with [skip ci], so that commit, the PR's new
+  # head, would otherwise carry no checks and need a manual retrigger. This
+  # run already linted, built and tested exactly that tree, so mirror its
+  # results onto the commit as statuses. Forks never reach this job: their
+  # branch is only checked, never repaired, so `repaired` is never true.
+  report-repaired-head:
+    runs-on: ubuntu-latest
+    needs: [checksums, lint, build, smoke-test]
+    if: always() && needs.checksums.outputs.repaired == 'true'
+    timeout-minutes: 5
+    permissions:
+      statuses: write
+
+    steps:
+      - name: Post check results on the repaired commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ needs.checksums.outputs.ref }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          LINT: ${{ needs.lint.result }}
+          BUILD: ${{ needs.build.result }}
+          SMOKE_TEST: ${{ needs.smoke-test.result }}
+        run: |
+          post() {
+            # A repair always changes the Dockerfile, so every job must
+            # have run. "skipped" here means an upstream job failed (or
+            # classification broke), never a legitimate docs-only skip.
+            local job="$1" result="$2" state=failure
+            [[ "$result" == success ]] && state=success
+            gh api --method POST "repos/$REPO/statuses/$SHA" \
+              -f state="$state" -f context="ci/$job" -f target_url="$RUN_URL" \
+              -f description="$job: $result (from the run that pushed this commit)"
+          }
+          post lint "$LINT"
+          post build "$BUILD"
+          post smoke-test "$SMOKE_TEST"
