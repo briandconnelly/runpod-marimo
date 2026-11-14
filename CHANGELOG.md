@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - The token file is now created as the `runpod` user instead of by root with `install -o runpod`, so startup no longer needs `CAP_CHOWN` to enable auth. CI's denied-chown suites now run with auth on; a new suite checks that `MARIMO_DISABLE_AUTH=true` refuses to start and that `MARIMO_DISABLE_AUTH=false` boots normally.
+- The release workflow now pushes the CPU image it smoke-tested, built in the same job on the same builder, instead of an independent rebuild on another runner that could pick up different upstream packages. The GPU image is built and pushed only after the CPU job passes.
 
 ### Fixed
 
