@@ -172,17 +172,15 @@ shared_tests() {
     # boot against an empty persistent cache, and that was observed to take
     # >6 min on a shared host under load. Retry until a ~10-min deadline.
     check "health endpoint 2xx on :2971" wait_for_health 600
-    if [[ "${MARIMO_DISABLE_AUTH:-}" != "true" ]]; then
-        # Verify the auth boundary end-to-end: the API must reject
-        # unauthenticated requests and accept the resolved token.
-        # --data-urlencode with -G reads the token from the file and
-        # URL-encodes it, so user-chosen passwords with special
-        # characters survive the round trip.
-        check "API rejects unauthenticated requests" \
-            eq "$(http_code http://localhost:2971/api/status)" 401
-        check "API accepts the resolved token" \
-            eq "$(http_code http://localhost:2971/api/status -G --data-urlencode access_token@/home/runpod/.config/marimo/token)" 200
-    fi
+    # Verify the auth boundary end-to-end: the API must reject
+    # unauthenticated requests and accept the resolved token.
+    # --data-urlencode with -G reads the token from the file and
+    # URL-encodes it, so user-chosen passwords with special
+    # characters survive the round trip.
+    check "API rejects unauthenticated requests" \
+        eq "$(http_code http://localhost:2971/api/status)" 401
+    check "API accepts the resolved token" \
+        eq "$(http_code http://localhost:2971/api/status -G --data-urlencode access_token@/home/runpod/.config/marimo/token)" 200
 
     section "Marimo process"
     local MARIMO_PID MARIMO_USER MARIMO_CMD MARIMO_WS
@@ -214,33 +212,27 @@ shared_tests() {
         # parent normally reports as `uv`; accept either name.
         check "marimo's parent is uv"                grep -qxE 'uvx?' <<<"$(head -1 <<<"$MARIMO_ANCESTORS")"
 
-        # Token auth is on by default; --no-token appears only when the pod
-        # explicitly opted out with MARIMO_DISABLE_AUTH=true. The resolved
+        # Token auth is mandatory; --no-token must never appear. The resolved
         # token travels via --token-password-file (never a bare
         # --token-password flag, which would leak it into `ps`).
         local TOKEN_FILE=/home/runpod/.config/marimo/token
-        if [[ "${MARIMO_DISABLE_AUTH:-}" == "true" ]]; then
-            check "marimo --no-token present (auth disabled)" has_substr "$MARIMO_CMD" '--no-token'
-            check "marimo --token-password-file absent"       not has_substr "$MARIMO_CMD" '--token-password-file'
-        else
-            check "marimo --token-password-file present" has_substr "$MARIMO_CMD" '--token-password-file'
-            check "marimo --no-token absent"             not has_substr "$MARIMO_CMD" '--no-token'
-            check "token not on the command line"        not has_substr "$MARIMO_CMD" '--token-password '
-            check "token file non-empty"                 test -s "$TOKEN_FILE"
-            check "token file owned by runpod"           eq "$(stat -c %U "$TOKEN_FILE")" runpod
-            check "token file mode 0600"                 eq "$(stat -c %a "$TOKEN_FILE")" 600
-            # Resolution order: MARIMO_TOKEN_PASSWORD wins, then
-            # JUPYTER_PASSWORD, then a generated token (content unknowable
-            # here, so only the two deterministic sources are asserted).
-            # Both values are passed as argv, so a password full of shell
-            # metacharacters (CI uses `sp3c!al ch@rs&?`) needs no quoting.
-            if [[ -n "${MARIMO_TOKEN_PASSWORD:-}" ]]; then
-                check "token file matches MARIMO_TOKEN_PASSWORD" \
-                    eq "$(cat "$TOKEN_FILE")" "$MARIMO_TOKEN_PASSWORD"
-            elif [[ -n "${JUPYTER_PASSWORD:-}" ]]; then
-                check "token file matches JUPYTER_PASSWORD fallback" \
-                    eq "$(cat "$TOKEN_FILE")" "$JUPYTER_PASSWORD"
-            fi
+        check "marimo --token-password-file present" has_substr "$MARIMO_CMD" '--token-password-file'
+        check "marimo --no-token absent"             not has_substr "$MARIMO_CMD" '--no-token'
+        check "token not on the command line"        not has_substr "$MARIMO_CMD" '--token-password '
+        check "token file non-empty"                 test -s "$TOKEN_FILE"
+        check "token file owned by runpod"           eq "$(stat -c %U "$TOKEN_FILE")" runpod
+        check "token file mode 0600"                 eq "$(stat -c %a "$TOKEN_FILE")" 600
+        # Resolution order: MARIMO_TOKEN_PASSWORD wins, then
+        # JUPYTER_PASSWORD, then a generated token (content unknowable
+        # here, so only the two deterministic sources are asserted).
+        # Both values are passed as argv, so a password full of shell
+        # metacharacters (CI uses `sp3c!al ch@rs&?`) needs no quoting.
+        if [[ -n "${MARIMO_TOKEN_PASSWORD:-}" ]]; then
+            check "token file matches MARIMO_TOKEN_PASSWORD" \
+                eq "$(cat "$TOKEN_FILE")" "$MARIMO_TOKEN_PASSWORD"
+        elif [[ -n "${JUPYTER_PASSWORD:-}" ]]; then
+            check "token file matches JUPYTER_PASSWORD fallback" \
+                eq "$(cat "$TOKEN_FILE")" "$JUPYTER_PASSWORD"
         fi
 
         # The workspace path is the last positional argument to marimo
@@ -397,21 +389,19 @@ shared_tests() {
     # The auth boundary itself is already covered by the 401/200 checks in
     # the HTTP endpoint section above; this asserts the skill's own script
     # picks up the exported token, which those cannot see.
-    if [[ "${MARIMO_DISABLE_AUTH:-}" != "true" ]]; then
-        local PAIR_OUT=/tmp/marimo-pair-probe.out
-        local PAIR_OUT_NOTOKEN=/tmp/marimo-pair-probe-notoken.out
-        as_runpod "bash $SKILL_DIR/scripts/execute-code.sh --url http://localhost:2971 -c pass" \
-            > "$PAIR_OUT" 2>&1 || true
-        check "execute-code.sh authenticates via exported MARIMO_TOKEN" \
-            not grep -qF 'Failed to connect' "$PAIR_OUT"
-        # Negative control: the same call with the token stripped must not
-        # get past auth. Without it, the check above would also pass against
-        # a server that required no token at all.
-        as_runpod "MARIMO_TOKEN= bash $SKILL_DIR/scripts/execute-code.sh --url http://localhost:2971 -c pass" \
-            > "$PAIR_OUT_NOTOKEN" 2>&1 || true
-        check "execute-code.sh is rejected without a token" \
-            grep -qF 'Failed to connect' "$PAIR_OUT_NOTOKEN"
-    fi
+    local PAIR_OUT=/tmp/marimo-pair-probe.out
+    local PAIR_OUT_NOTOKEN=/tmp/marimo-pair-probe-notoken.out
+    as_runpod "bash $SKILL_DIR/scripts/execute-code.sh --url http://localhost:2971 -c pass" \
+        > "$PAIR_OUT" 2>&1 || true
+    check "execute-code.sh authenticates via exported MARIMO_TOKEN" \
+        not grep -qF 'Failed to connect' "$PAIR_OUT"
+    # Negative control: the same call with the token stripped must not
+    # get past auth. Without it, the check above would also pass against
+    # a server that required no token at all.
+    as_runpod "MARIMO_TOKEN= bash $SKILL_DIR/scripts/execute-code.sh --url http://localhost:2971 -c pass" \
+        > "$PAIR_OUT_NOTOKEN" 2>&1 || true
+    check "execute-code.sh is rejected without a token" \
+        grep -qF 'Failed to connect' "$PAIR_OUT_NOTOKEN"
 
     section "Coding agents"
     # pi and opencode are pinned standalone release binaries. Both are
@@ -450,8 +440,7 @@ shared_tests() {
 
     # MARIMO_TOKEN is deliberately exported (so bundled agent tooling can
     # authenticate), but only the value the Authentication block resolved.
-    # An inbound MARIMO_TOKEN is excluded from _forward_env, so with auth
-    # disabled nothing must be exported even if the pod set one — assert
+    # An inbound MARIMO_TOKEN is excluded from _forward_env — assert
     # the resolved value, never mere presence, or a stale pod-supplied
     # token would satisfy the check.
     # Both shell flavours must be covered. /etc/profile.d reaches only login
@@ -471,27 +460,14 @@ shared_tests() {
         # shellcheck disable=SC2016  # as above; -i is the interactive non-login path
         su "$u" -c 'bash -ic "printf %s \"\$MARIMO_TOKEN\""' > "/tmp/tok-inter-$u" 2>/dev/null || true
     done
-    if [[ "${MARIMO_DISABLE_AUTH:-}" == "true" ]]; then
-        check "zz-pod-env.sh omits MARIMO_TOKEN (auth disabled)" \
-            not grep -q '^export MARIMO_TOKEN=' "$ZZ_ENV"
-        # start_marimo.sh removes the token file when auth is disabled, so
-        # the .bashrc hook has nothing to read and cannot resurrect a token
-        # left behind by an earlier boot with auth on.
-        check "token file removed (auth disabled)" not test -e "$TOKFILE"
-        for u in root runpod; do
-            check "$u interactive shell has no MARIMO_TOKEN (auth disabled)" \
-                not test -s "/tmp/tok-inter-$u"
-        done
-    else
-        check "zz-pod-env.sh exports MARIMO_TOKEN" \
-            grep -q '^export MARIMO_TOKEN=' "$ZZ_ENV"
-        for u in root runpod; do
-            check "$u login shell MARIMO_TOKEN matches the token file" \
-                cmp -s "/tmp/tok-login-$u" "$TOKFILE"
-            check "$u interactive shell MARIMO_TOKEN matches the token file" \
-                cmp -s "/tmp/tok-inter-$u" "$TOKFILE"
-        done
-    fi
+    check "zz-pod-env.sh exports MARIMO_TOKEN" \
+        grep -q '^export MARIMO_TOKEN=' "$ZZ_ENV"
+    for u in root runpod; do
+        check "$u login shell MARIMO_TOKEN matches the token file" \
+            cmp -s "/tmp/tok-login-$u" "$TOKFILE"
+        check "$u interactive shell MARIMO_TOKEN matches the token file" \
+            cmp -s "/tmp/tok-inter-$u" "$TOKFILE"
+    done
 
     section "User and permissions"
     check "runpod user exists"            id runpod

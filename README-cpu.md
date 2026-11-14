@@ -19,7 +19,6 @@ Pre-installing them would allow imports that work in the pod but leave no record
 | `MARIMO_WORKSPACE` | Path to open in marimo's file browser | `/workspace` |
 | `MARIMO_CACHE_DIR` | Parent directory for uv and Hugging Face caches | `$MARIMO_WORKSPACE/.cache` |
 | `MARIMO_TOKEN_PASSWORD` | Password required to access the marimo UI | _(falls back to `JUPYTER_PASSWORD`, else a generated token)_ |
-| `MARIMO_DISABLE_AUTH` | Set to `true` to disable token authentication | `false` |
 
 **CPU pods have no Volume Disk.** Without a Network Volume attached at `/workspace`, notebooks and their caches live on the Container Disk, which is wiped whenever the pod stops, and the caches use its space.
 Attach a Network Volume to keep them across stop/start ([details](https://github.com/briandconnelly/runpod-marimo#cpu-pods-and-network-volumes)).
@@ -30,7 +29,7 @@ Set `MARIMO_CACHE_DIR=/home/runpod/.cache` for ephemeral container-local caches;
 ## Authentication
 
 Runpod's web proxy does **not** authenticate requests — anyone with the pod's proxy URL (`https://<pod-id>-2971.proxy.runpod.net`) can reach the marimo server, which is arbitrary code execution.
-Token authentication is therefore on by default, with the password resolved in order:
+Token authentication is therefore always on (it cannot be disabled), with the password resolved in order:
 
 1. `MARIMO_TOKEN_PASSWORD`, if set — an explicit password of your choosing.
 2. `JUPYTER_PASSWORD`, if set — Runpod auto-generates this for templates that declare it. Never shown in the console, but it survives pod stop/start, so a bookmarked access URL keeps working.
@@ -38,8 +37,6 @@ Token authentication is therefore on by default, with the password resolved in o
 
 The startup logs (Runpod console) print a ready-to-use access URL (`.../?access_token=...`).
 It is also stored at `/home/runpod/.config/marimo/token` and exported as `MARIMO_TOKEN` into login and interactive shells for agents in the pod.
-
-Set `MARIMO_DISABLE_AUTH=true` to opt out (`--no-token`) only if something else restricts access to port 2971.
 
 marimo runs as `runpod`, but that is hygiene, not a sandbox: `runpod` has passwordless `sudo apt-get` (root-equivalent) and console/SSH shells are root.
 

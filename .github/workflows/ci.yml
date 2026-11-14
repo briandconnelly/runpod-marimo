@@ -206,8 +206,8 @@ jobs:
 
       - name: Run CPU smoke tests
         # One suite run per auth mode: the smoke tests assert different
-        # things depending on MARIMO_TOKEN_PASSWORD / JUPYTER_PASSWORD /
-        # MARIMO_DISABLE_AUTH, so each branch of the startup script's
+        # things depending on MARIMO_TOKEN_PASSWORD / JUPYTER_PASSWORD,
+        # so each branch of the startup script's
         # token resolution gets exercised against a real container.
         run: |
           source tests/common.sh
@@ -252,13 +252,23 @@ jobs:
             -e 'MARIMO_TOKEN_PASSWORD=sp3c!al ch@rs&?' -e JUPYTER_PASSWORD=from-jupyter
           run_suite "JUPYTER_PASSWORD fallback" -e JUPYTER_PASSWORD=from-jupyter
           # An inbound MARIMO_TOKEN must never survive into the shell
-          # environment: with auth on it would shadow the resolved token,
-          # and with auth disabled it would export a token for a server
-          # that accepts none. Both branches get a poisoned value.
+          # environment, where it would shadow the resolved token.
           run_suite "inbound MARIMO_TOKEN does not shadow the resolved one" \
             -e MARIMO_TOKEN=poisoned-inbound-value
-          run_suite "auth disabled" -e MARIMO_DISABLE_AUTH=true \
-            -e MARIMO_TOKEN=poisoned-inbound-value
+          # Existing templates still carry the old documented default
+          # MARIMO_DISABLE_AUTH=false; it must boot normally with auth on.
+          run_suite "legacy MARIMO_DISABLE_AUTH=false keeps auth on" \
+            -e MARIMO_DISABLE_AUTH=false
+          # Running without a token is not possible: the removed opt-out
+          # must stop the pod rather than start marimo unauthenticated.
+          docker run -d --name marimo-ci -e MARIMO_DISABLE_AUTH=true \
+            -e MARIMO_CACHE_DIR=/home/runpod/.cache runpod-marimo:smoke-test
+          check "MARIMO_DISABLE_AUTH=true refuses to start" \
+            eq "$(timeout 60 docker wait marimo-ci)" 1
+          docker logs marimo-ci > "$RUNNER_TEMP/noauth.log" 2>&1
+          check "MARIMO_DISABLE_AUTH=true reports why" \
+            grep -qF "Error: MARIMO_DISABLE_AUTH is no longer supported" "$RUNNER_TEMP/noauth.log"
+          docker rm -f marimo-ci
           # #50: the default cache root is <workspace>/.cache, so an empty
           # /workspace stands in for a freshly attached network volume. With
           # no network at all, marimo must still start from the image's
@@ -269,18 +279,18 @@ jobs:
           # #115: dropping CHOWN produces real EPERM errors. umask 000
           # leaves new root-owned dirs usable by runpod. Supplementary
           # runpod membership lets root install the root:runpod env file
-          # without CHOWN; disable auth because its token needs a new owner.
+          # without CHOWN; the token file is created as runpod, so auth
+          # stays on.
           EXPECT_CHOWN_WARNINGS=true run_suite_raw "denied chown, writable caches" \
             --cap-drop CHOWN --group-add runpod --tmpfs /workspace:mode=1777 \
-            --entrypoint /tests/start-no-chown.sh -e MARIMO_DISABLE_AUTH=true
+            --entrypoint /tests/start-no-chown.sh
           # With the normal umask, new directories come out root-owned 0755,
           # as on Runpod's NFS pod volumes. Startup must chmod them 1777 so
           # marimo still starts on the first boot.
           EXPECT_CHOWN_WARNINGS=true EXPECT_CHMOD_FALLBACK=true \
             run_suite_raw "denied chown, umask 022 (NFS-like) caches" \
             --cap-drop CHOWN --group-add runpod --tmpfs /workspace:mode=1777 \
-            --entrypoint /tests/start-no-chown.sh -e TEST_UMASK=022 \
-            -e MARIMO_DISABLE_AUTH=true
+            --entrypoint /tests/start-no-chown.sh -e TEST_UMASK=022
           # A pre-existing cache directory runpod cannot write is left alone,
           # so it must reach the probe's clear error on the first boot rather
           # than dying at the chown, which is what made each restart create
@@ -288,7 +298,6 @@ jobs:
           docker run -d --name marimo-ci --cap-drop CHOWN \
             --tmpfs /workspace:mode=1777 --entrypoint /tests/start-no-chown.sh \
             -e TEST_UMASK=022 -e TEST_PRECREATE_UNWRITABLE=/workspace/.cache/uv \
-            -e MARIMO_DISABLE_AUTH=true \
             -v "$(pwd)/tests:/tests:ro" runpod-marimo:smoke-test
           check "unwritable cache fails on first boot" eq "$(timeout 30 docker wait marimo-ci)" 1
           docker logs marimo-ci > "$RUNNER_TEMP/chown.log" 2>&1
