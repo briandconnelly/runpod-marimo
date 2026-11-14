@@ -19,6 +19,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - A pull request whose checksums CI repaired now shows check results on its head commit. The repair commit is pushed with `[skip ci]`, so it used to carry no checks and needed a manual empty commit to retrigger CI; the run that pushed it now posts its lint, build and smoke-test results on that commit as statuses.
+- `scripts/sync-checksums.sh --base` now exits with an error before downloading anything when the ref is not a commit containing a Dockerfile. A mistyped or unfetched ref used to disable the tag-mutation interlock silently and exit 0.
+- `scripts/sync-checksums.sh` now prints `error: no download URL in Dockerfile referencing ...` when a pinned version has no matching download URL, instead of exiting 1 with no message.
 
 ## [0.10.2] - 2026-11-05
 

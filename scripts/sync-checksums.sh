@@ -44,6 +44,15 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+# The interlock below reads the base Dockerfile with `|| true`, so an
+# unresolvable ref would silently disable it. Fail before any download.
+if [[ -n $base_ref ]] &&
+    ! { git rev-parse --verify --quiet "${base_ref}^{commit}" >/dev/null &&
+        git cat-file -e "${base_ref}:Dockerfile" 2>/dev/null; }; then
+    echo "error: --base ref '$base_ref' is not a commit with a Dockerfile" >&2
+    exit 2
+fi
+
 # sha256sum on Linux/CI, shasum on macOS.
 sha256_of() {
     if command -v sha256sum >/dev/null 2>&1; then
@@ -86,7 +95,7 @@ while read -r prefix; do
 
     # Recover the URL template from the RUN line that consumes this version,
     # rather than duplicating it here where it could silently drift.
-    url_tpl=$(grep -F "\${${ver_arg}}" Dockerfile | grep -oE 'https://[^"]+' | "${url_filter[@]}" | head -1)
+    url_tpl=$(grep -F "\${${ver_arg}}" Dockerfile | grep -oE 'https://[^"]+' | "${url_filter[@]}" | head -1 || true)
     if [[ -z $url_tpl ]]; then
         echo "error: no download URL in Dockerfile referencing \${$ver_arg}" >&2
         exit 1
