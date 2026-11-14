@@ -487,7 +487,11 @@ shared_tests() {
             check "host key $kt"              test -r "/etc/ssh/ssh_host_${kt}_key"
         done
     else
-        echo "  (skipped — no /root/.ssh/authorized_keys; PUBLIC_KEY was not provided)"
+        echo "  (no /root/.ssh/authorized_keys; PUBLIC_KEY was not provided)"
+        # Host keys are generated per pod by start_marimo.sh when PUBLIC_KEY
+        # is set. Keys baked into the image would be shared by every pod
+        # running the same public tag.
+        check "no SSH host keys baked into the image" not glob_exists '/etc/ssh/ssh_host_*'
     fi
 
     section "Sandbox isolation"
