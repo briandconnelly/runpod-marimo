@@ -140,6 +140,17 @@ shared_tests() {
     check "Ubuntu 24.04 base"       grep -qF 'VERSION_ID="24.04"' /etc/os-release
     check "uv from /usr/local/bin"  eq "$(command -v uv)"  /usr/local/bin/uv
     check "uvx from /usr/local/bin" eq "$(command -v uvx)" /usr/local/bin/uvx
+    # Shipped publicly, so each downloaded tool carries its LICENSE, and
+    # each is executed (not just found on PATH) as both identities.
+    for cmd in gh duckdb runpodctl; do
+        check "$cmd LICENSE shipped" test -r "/usr/share/licenses/$cmd/LICENSE"
+    done
+    for cmd in "gh --version" "duckdb --version" "runpodctl version" "runpodctl --version"; do
+        echo "  [$cmd] $($cmd 2>&1 | head -1)"
+        # shellcheck disable=SC2086  # $cmd is a fixed "tool flag" pair
+        check "$cmd runs as root"   output_has -E '[0-9]+\.[0-9]+\.[0-9]+' $cmd
+        check "$cmd runs as runpod" output_has -E '[0-9]+\.[0-9]+\.[0-9]+' as_runpod "$cmd"
+    done
 
     section "Node.js"
     # marimo's LSP bridge (_lsp/index.cjs) is launched with `node`; the ty
@@ -206,7 +217,7 @@ shared_tests() {
         # ancestry", not a particular depth.
         local MARIMO_ANCESTORS
         MARIMO_ANCESTORS=$(ancestors_of "$MARIMO_PID")
-        check "PID 1 is su (start script exec'd it)" eq "$(ps -o comm= -p 1 | tr -d ' ')" su
+        check "PID 1 is tini"                        eq "$(ps -o comm= -p 1 | tr -d ' ')" tini
         check "no shell between PID 1 and marimo"    not grep -qxE 'bash|sh|dash' <<<"$MARIMO_ANCESTORS"
         # The uvx binary execs its sibling uv (`uv tool uvx`), so the
         # parent normally reports as `uv`; accept either name.
@@ -257,6 +268,14 @@ shared_tests() {
         MARIMO_CWD=$(as_runpod "readlink /proc/$MARIMO_PID/cwd" 2>/dev/null || true)
         check "marimo cwd matches workspace" eq "$MARIMO_CWD" "$MARIMO_WS"
     fi
+
+    section "Zombie reaping"
+    # The subshell exits at once, orphaning sleep; it is reparented to
+    # PID 1, which must wait() on it once it exits.
+    local ORPHAN_PID
+    ORPHAN_PID=$(bash -c 'sleep 2 >/dev/null 2>&1 & echo $!')
+    sleep 4
+    check "PID 1 reaps orphaned children" not output_has Z ps -o stat= -p "$ORPHAN_PID"
 
     section "MCP integration"
     # Regression test for the mcp 2.0.0 break (marimo#10371). The symbols
@@ -467,6 +486,20 @@ shared_tests() {
             cmp -s "/tmp/tok-login-$u" "$TOKFILE"
         check "$u interactive shell MARIMO_TOKEN matches the token file" \
             cmp -s "/tmp/tok-inter-$u" "$TOKFILE"
+    done
+
+    # docker exec and the Runpod SSH proxy start non-login shells, which
+    # never read /etc/profile.d: the tools must be on the container PATH,
+    # and interactive shells must recover the pod's cache locations.
+    check "container PATH includes runpod's tool bin" \
+        grep -qz '^PATH=.*/home/runpod/\.local/bin' /proc/1/environ
+    for u in root runpod; do
+        # shellcheck disable=SC2016
+        check "$u interactive shell recovers HF_HOME" eq \
+            "$(su "$u" -c 'env -u HF_HOME -u UV_CACHE_DIR bash -ic "printf %s \"\$HF_HOME\""' 2>/dev/null)" "$MARIMO_ENV_HF"
+        # shellcheck disable=SC2016
+        check "$u interactive shell recovers UV_CACHE_DIR" eq \
+            "$(su "$u" -c 'env -u HF_HOME -u UV_CACHE_DIR bash -ic "printf %s \"\$UV_CACHE_DIR\""' 2>/dev/null)" "$MARIMO_ENV_UV"
     done
 
     section "User and permissions"
