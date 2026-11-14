@@ -125,10 +125,11 @@ http://localhost:2971
 
 Give the URL explicitly. marimo's auto-discovery only registers servers started with `--no-token`, and this image always enables token authentication.
 
-The resolved token is already exported as `MARIMO_TOKEN` in login shells and in interactive shells (the Runpod web terminal, SSH, `docker exec -it`), so an agent launched from one of those needs no further setup. A *non-interactive* shell — `docker exec <pod> bash -c '...'` — sources neither startup file, so export it yourself there:
+The resolved token is already exported as `MARIMO_TOKEN` in login shells and in interactive shells (the Runpod web terminal, SSH, `docker exec -it`), along with the rest of the pod environment (`UV_CACHE_DIR`, `HF_HOME` and your pod env vars), so an agent launched from one of those needs no further setup. The tools `hf` and `ty` are on the container `PATH`, so they work in every shell. A *non-interactive* shell — `docker exec <pod> bash -c '...'` — sources neither startup file and gets only the container environment, so export what you need yourself there:
 
 ```bash
 export MARIMO_TOKEN=$(cat /home/runpod/.config/marimo/token)
+. /etc/profile.d/zz-pod-env.sh   # UV_CACHE_DIR, HF_HOME, pod env vars (and MARIMO_TOKEN)
 ```
 
 Harnesses other than Claude Code and Codex may scan different directories; point yours at `/opt/agent-skills/marimo-pair` if it does not pick the skill up.

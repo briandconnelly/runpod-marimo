@@ -105,6 +105,43 @@ uv sync --cache-dir "$cache" --script "$tmp/notebook.py" --offline --compile-byt
 SANDBOX
 }
 
+# Sandbox isolation probe. A PEP 723 script declaring only marimo, run as
+# runpod offline from CACHE, must import marimo (positive control) and
+# nothing the image installs elsewhere or a notebook would commonly want:
+# a package importable without a header entry breaks reproducibility.
+_sandbox_isolation_as_runpod() {
+    local cache_q version_q
+    cache_q=$(printf '%q' "$1")
+    version_q=$(printf '%q' "$2")
+    su -l runpod -c "bash -s -- $cache_q $version_q" <<'PROBE'
+set -euo pipefail
+cache=$1
+version=$2
+tmp=$(mktemp -d)
+trap 'rm -rf -- "$tmp"' EXIT
+cat > "$tmp/probe.py" <<EOF
+# /// script
+# dependencies = ["marimo==$version"]
+# ///
+import importlib.util
+import sys
+
+failures = []
+if importlib.util.find_spec("marimo") is None:
+    failures.append("marimo not importable (positive control)")
+for name in ("huggingface_hub", "pandas", "polars", "torch", "matplotlib", "scipy"):
+    if importlib.util.find_spec(name) is not None:
+        failures.append(f"{name} importable")
+leaks = [p for p in sys.path if "/.local/share/uv/tools/" in p]
+if leaks:
+    failures.append(f"uv tool env on sys.path: {leaks}")
+print("\n".join(failures) or "isolated")
+sys.exit(1 if failures else 0)
+EOF
+uv run --offline --cache-dir "$cache" --script "$tmp/probe.py"
+PROBE
+}
+
 # ancestors_of PID — print the comm of every ancestor of PID up to and
 #   including PID 1, nearest first, one per line.
 ancestors_of() {
@@ -145,8 +182,7 @@ shared_tests() {
     for cmd in gh duckdb runpodctl; do
         check "$cmd LICENSE shipped" test -r "/usr/share/licenses/$cmd/LICENSE"
     done
-    for cmd in "gh --version" "duckdb --version" "runpodctl version" "runpodctl --version"; do
-        echo "  [$cmd] $($cmd 2>&1 | head -1)"
+    for cmd in "gh --version" "duckdb --version" "runpodctl --version"; do
         # shellcheck disable=SC2086  # $cmd is a fixed "tool flag" pair
         check "$cmd runs as root"   output_has -E '[0-9]+\.[0-9]+\.[0-9]+' $cmd
         check "$cmd runs as runpod" output_has -E '[0-9]+\.[0-9]+\.[0-9]+' as_runpod "$cmd"
@@ -176,8 +212,8 @@ shared_tests() {
     # startup barrier. In CI, docker exec launches this suite well under a
     # second after `docker run -d`, so a bare pgrep below would race
     # marimo's launch; once /health answers, the process must exist.
-    # /health is served 200 without authentication, so this probe works
-    # identically whether token auth is on (default) or disabled.
+    # /health is served 200 without authentication, so this probe needs
+    # no token.
     # marimo now launches from the image's prewarmed cache, but a runtime
     # MARIMO_VERSION override still downloads before binding :2971 on first
     # boot against an empty persistent cache, and that was observed to take
@@ -205,15 +241,16 @@ shared_tests() {
         check "marimo --host 0.0.0.0"     has_substr "$MARIMO_CMD" '--host 0.0.0.0'
         check "marimo --port 2971"        has_substr "$MARIMO_CMD" '--port 2971'
 
-        # Shutdown path. start_marimo.sh execs `su -l runpod -c 'cd ... &&
-        # exec uvx ...'`. Every process between PID 1 and marimo must
-        # forward SIGTERM: su does (util-linux), and uv does (its tool
+        # Shutdown path. start_marimo.sh re-execs itself under tini, then
+        # execs `su -l runpod -c 'cd ... && exec uvx ...'`. Every process
+        # between PID 1 and marimo must forward SIGTERM: tini does, su does
+        # (util-linux), and uv does (its tool
         # runner spawns the tool and waits, forwarding SIGTERM/SIGINT —
         # uv-command-support/src/child.rs, run_to_completion). A shell
         # does not: a non-interactive bash receiving SIGTERM just exits,
         # orphaning marimo until Docker's SIGKILL deadline — which is what
         # the inner `exec` removes. So the expected tree is
-        # su(1) -> uv -> marimo, and the invariant is "no shell in the
+        # tini(1) -> su -> uv -> marimo, and the invariant is "no shell in the
         # ancestry", not a particular depth.
         local MARIMO_ANCESTORS
         MARIMO_ANCESTORS=$(ancestors_of "$MARIMO_PID")
@@ -350,6 +387,12 @@ shared_tests() {
                 check "notebook sandbox builds offline from seeded cache" \
                     _offline_sandbox_as_runpod "$MARIMO_ENV_UV" "$seeded_version"
             fi
+        fi
+        if [[ -n "$MARIMO_ENV_UV" ]]; then
+            local probe_version=""
+            IFS= read -r probe_version < /usr/local/share/runpod-marimo/prewarmed-marimo-version 2>/dev/null || true
+            check "sandbox imports only what its header declares" \
+                _sandbox_isolation_as_runpod "$MARIMO_ENV_UV" "$probe_version"
         fi
         if [[ -n "$MARIMO_ENV_HF" ]]; then
             check "HF_HOME usable by runpod" _probe_dir_as_runpod "$MARIMO_ENV_HF"
