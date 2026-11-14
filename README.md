@@ -36,7 +36,6 @@ Pre-installing packages would allow imports that work in the pod but have no rec
 | `MARIMO_WORKSPACE` | Path to open in marimo's file browser | `/workspace` |
 | `MARIMO_CACHE_DIR` | Parent directory for uv and Hugging Face caches | `$MARIMO_WORKSPACE/.cache` |
 | `MARIMO_TOKEN_PASSWORD` | Password required to access the marimo UI | _(falls back to `JUPYTER_PASSWORD`, else a generated token)_ |
-| `MARIMO_DISABLE_AUTH` | Set to `true` to disable marimo's token authentication entirely | `false` |
 
 `/workspace` is where Runpod mounts network volumes, so notebooks created through the file browser automatically persist across pod stop/start when a volume is attached.
 Without a volume, `/workspace` is a regular container directory (ephemeral).
@@ -67,7 +66,7 @@ That restores ephemeral container-local caches, so notebook dependencies and mod
 ## Authentication
 
 Runpod's web proxy does **not** authenticate requests — anyone with the pod's proxy URL (`https://<pod-id>-2971.proxy.runpod.net`) can reach the marimo server, and a notebook server is arbitrary code execution.
-The image therefore enables marimo's token authentication by default, resolving the password in order:
+The image therefore always enables marimo's token authentication, resolving the password in order:
 
 1. `MARIMO_TOKEN_PASSWORD`, if set — an explicit password of your choosing.
 2. `JUPYTER_PASSWORD`, if set — Runpod auto-generates this env var for templates that declare it. The console does not display its value anywhere, but unlike a generated token it stays stable across pod stop/start, so a bookmarked access URL keeps working.
@@ -76,7 +75,7 @@ The image therefore enables marimo's token authentication by default, resolving 
 Whatever the source, the startup logs print a ready-to-use access URL (`https://<pod-id>-2971.proxy.runpod.net/?access_token=...`) — open the pod's logs in the Runpod console to find it. The resolved token is also stored at `/home/runpod/.config/marimo/token`.
 The token is passed to marimo via `--token-password-file`, so it does not appear in `ps` output or `/proc/<pid>/cmdline`. It **is** exported as `MARIMO_TOKEN` into login and interactive shell environments, so the bundled [marimo-pair](#pairing-with-a-coding-agent) skill and any agent you bring into the pod can authenticate without setup. This does not widen who can read it: every identity that gets a shell here (`root`, and `runpod` via marimo) can already read the token file, and the token is printed to the pod logs.
 
-Set `MARIMO_DISABLE_AUTH=true` to opt out and run with `--no-token`. Only do this if something else restricts access to port 2971.
+Token authentication cannot be disabled. The former `MARIMO_DISABLE_AUTH` opt-out has been removed: a pod that sets it to anything but `false` stops at startup with an error instead of serving an unauthenticated editor.
 
 ### Users and privileges
 
@@ -124,7 +123,7 @@ Open a notebook in the browser, launch the agent from a pod terminal (the Runpod
 http://localhost:2971
 ```
 
-Give the URL explicitly. marimo's auto-discovery only registers servers started with `--no-token`, and this image enables token authentication by default.
+Give the URL explicitly. marimo's auto-discovery only registers servers started with `--no-token`, and this image always enables token authentication.
 
 The resolved token is already exported as `MARIMO_TOKEN` in login shells and in interactive shells (the Runpod web terminal, SSH, `docker exec -it`), so an agent launched from one of those needs no further setup. A *non-interactive* shell — `docker exec <pod> bash -c '...'` — sources neither startup file, so export it yourself there:
 

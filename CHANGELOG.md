@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed
+
+- The `MARIMO_DISABLE_AUTH` opt-out. Token authentication is now always on, because Runpod's web proxy authenticates nothing and an unauthenticated marimo editor gives anyone with the pod's proxy URL arbitrary code execution. A pod that sets `MARIMO_DISABLE_AUTH` to anything other than `false` (the old documented default, still present in existing templates) now stops at startup with an error rather than silently ignoring it; unset it, and set `MARIMO_TOKEN_PASSWORD` for a fixed password.
+
+### Changed
+
+- The token file is now created as the `runpod` user instead of by root with `install -o runpod`, so startup no longer needs `CAP_CHOWN` to enable auth. CI's denied-chown suites now run with auth on; a new suite checks that `MARIMO_DISABLE_AUTH=true` refuses to start and that `MARIMO_DISABLE_AUTH=false` boots normally.
+
 ## [0.10.2] - 2026-11-05
 
 ### Fixed
