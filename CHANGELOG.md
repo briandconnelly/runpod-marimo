@@ -34,9 +34,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A pull request whose checksums CI repaired now shows check results on its head commit. The repair commit is pushed with `[skip ci]`, so it used to carry no checks and needed a manual empty commit to retrigger CI; the run that pushed it now posts its lint, build and smoke-test results on that commit as statuses.
 - `scripts/sync-checksums.sh --base` now exits with an error before downloading anything when the ref is not a commit containing a Dockerfile. A mistyped or unfetched ref used to disable the tag-mutation interlock silently and exit 0.
 - `scripts/sync-checksums.sh` now prints `error: no download URL in Dockerfile referencing ...` when a pinned version has no matching download URL, instead of exiting 1 with no message.
-
-### Fixed
-
 - `hf` and `ty` now work in every shell, including `docker exec` and other non-login shells, because `/home/runpod/.local/bin` is on the container `PATH`. Interactive non-login shells (the Runpod web terminal, SSH, `docker exec -it`) now also load the pod environment, so `UV_CACHE_DIR`, `HF_HOME` and forwarded pod env vars point where marimo's do instead of to uv's and Hugging Face's defaults. A non-interactive `bash -c` still gets only the container environment.
 - Orphaned processes are now reaped. `tini` runs as PID 1 (the start script re-execs itself under it), so processes left behind by terminals and coding agents no longer accumulate as zombies; before, PID 1 was `su`, which never reaps them. `docker stop` still reaches marimo through `tini`.
 
