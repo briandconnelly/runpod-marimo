@@ -1,6 +1,16 @@
 #!/bin/bash
 set -Eeuo pipefail
 
+# Run under tini when started as PID 1, so processes orphaned by terminals
+# and agents are reaped instead of piling up as zombies (su, the eventual
+# PID 1 otherwise, never waits on them). No -g: the su -> uv -> marimo chain
+# below forwards SIGTERM link by link, and tini forwards it to su. Keeping
+# CMD as this script means template command overrides and test entrypoints
+# that exec it still get tini.
+if [[ $$ -eq 1 && -x /usr/bin/tini ]]; then
+    exec /usr/bin/tini -- "$0" "$@"
+fi
+
 # marimo always runs with token auth (see Authentication below). The old
 # MARIMO_DISABLE_AUTH opt-out was removed; setting it to anything but
 # "false" (its documented default, still present in existing templates)
@@ -124,9 +134,9 @@ _validate_path_var() {
 
 # Ensure a directory exists and try to give the runpod user ownership.
 # A denied chown on a new directory falls back to chmod 1777 and warns:
-# the probes below decide whether runpod can use the paths. Only chowns directories we created on this boot, to avoid
-# changing ownership of a pre-existing user-supplied path (e.g. a populated
-# volume subdir).
+# the probes below decide whether runpod can use the paths. Only chowns
+# directories we created on this boot, to avoid changing ownership of a
+# pre-existing user-supplied path (e.g. a populated volume subdir).
 # Special case: /workspace itself is always chown'd because Runpod mounts
 # network volumes there root-owned, and marimo (unprivileged) must be
 # able to write at the top level.
@@ -224,8 +234,8 @@ _forward_env() {
             PUBLIC_KEY|JUPYTER_PASSWORD|MARIMO_TOKEN_PASSWORD|MARIMO_DISABLE_AUTH) continue ;;
             # Owned by the Authentication block below, which appends the
             # resolved token to this file. Forwarding an inbound value here
-            # would leave a stale token exported when auth is disabled, and
-            # would race the authoritative append when it is not.
+            # would export a second, stale MARIMO_TOKEN ahead of the
+            # authoritative append.
             MARIMO_TOKEN) continue ;;
         esac
         # Skip entries that aren't valid shell identifiers (e.g. BASH_FUNC_*%%)
@@ -313,11 +323,12 @@ printf 'export MARIMO_TOKEN=%q\n' "$TOKEN_VALUE" >> "$POD_ENV_FILE"
 # discoverability story: the Runpod console shows neither JUPYTER_PASSWORD
 # nor anything we generate, so the pod logs are the one place a user can
 # always look. jq URL-encodes the token so user-chosen passwords with
-# special characters produce a working link. Logs are only visible to
+# special characters produce a working link; the token reaches jq on stdin
+# so it never appears on a command line. Logs are only visible to
 # the console-authenticated pod owner, and marimo itself already prints
 # a localhost URL with the same token.
 if [[ -n "${RUNPOD_POD_ID:-}" ]]; then
-    TOKEN_URI=$(jq -rn --arg v "$TOKEN_VALUE" '$v|@uri')
+    TOKEN_URI=$(printf '%s' "$TOKEN_VALUE" | jq -sRr '@uri')
     echo "Access marimo at: https://${RUNPOD_POD_ID}-2971.proxy.runpod.net/?access_token=${TOKEN_URI}"
 fi
 
@@ -372,8 +383,9 @@ MARIMO_ARGS="edit --host 0.0.0.0 --port 2971 ${AUTH_FLAG} --sandbox ${WORKSPACE_
 # `--with` on one side silently turns first boot into a fresh download
 # instead of a cache hit.
 #
-# Process tree and shutdown. `exec su` makes su PID 1; util-linux su
-# forwards SIGTERM/SIGINT to its child. That child is the `-c` shell, and
+# Process tree and shutdown. tini is PID 1 (see the top of this script) and
+# forwards SIGTERM to `exec su`, its child; util-linux su forwards
+# SIGTERM/SIGINT to its child. That child is the `-c` shell, and
 # a non-interactive bash receiving SIGTERM simply dies, orphaning whatever
 # it was waiting on — so without the inner `exec`, a pod stop would kill
 # the shell and leave marimo running until Docker's SIGKILL deadline,
@@ -381,7 +393,7 @@ MARIMO_ARGS="edit --host 0.0.0.0 --port 2971 ${AUTH_FLAG} --sandbox ${WORKSPACE_
 # bash execs uv. uv does not exec the tool: its runner spawns marimo and
 # waits, but it forwards SIGTERM (and SIGINT when stdin is not a TTY) to
 # the child precisely for this PID-1/Docker case. So the tree is
-# su(1) -> uv -> marimo with every link forwarding, and the shell — the
+# tini(1) -> su -> uv -> marimo with every link forwarding, and the shell — the
 # one non-forwarding link — is gone. tests/common.sh asserts that shape.
 #
 # Prewarmed launch (#50). The image prewarms marimo into
