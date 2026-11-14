@@ -81,6 +81,21 @@ run_suite() {
     run_suite_raw "$name" -e MARIMO_CACHE_DIR=/home/runpod/.cache "$@"
 }
 
+# exit_code_within SECONDS — print the marimo-ci container's exit code once
+#   it has stopped, or nothing if it is still running at the deadline.
+#   Polls `docker inspect` rather than wrapping `docker wait` in GNU
+#   `timeout`, which stock macOS does not ship.
+exit_code_within() {
+    local deadline=$(( $(date +%s) + $1 ))
+    while [[ $(date +%s) -lt $deadline ]]; do
+        if [[ "$(docker inspect -f '{{.State.Running}}' marimo-ci 2>/dev/null)" == false ]]; then
+            docker inspect -f '{{.State.ExitCode}}' marimo-ci
+            return 0
+        fi
+        sleep 1
+    done
+}
+
 # expect_refusal NAME EXPECTED-TEXT DOCKER-RUN-ARGS... — startup must exit 1
 # and log EXPECTED-TEXT.
 expect_refusal() {
@@ -88,7 +103,7 @@ expect_refusal() {
     group "refusal: $name"
     docker rm -f marimo-ci >/dev/null 2>&1
     docker run -d --name marimo-ci "$@" "$IMAGE" >/dev/null
-    check "$name: exits 1" eq "$(timeout 60 docker wait marimo-ci)" 1
+    check "$name: exits 1" eq "$(exit_code_within 60)" 1
     docker logs marimo-ci > "$TMP/refusal.log" 2>&1
     check "$name: reports why" grep -qF -- "$text" "$TMP/refusal.log"
     docker rm -f marimo-ci >/dev/null
