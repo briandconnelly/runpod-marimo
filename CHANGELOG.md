@@ -12,13 +12,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The image no longer ships SSH host private keys. Every image through 0.10.2 carried the host keys openssh-server generated at build time, so all pods running the same public tag shared them, and anyone could pull the image and impersonate a pod's SSH server. Keys are now generated at startup when `PUBLIC_KEY` is set and no key exists yet. They live in the container filesystem, so they survive a restart of the same container but are regenerated whenever the container is recreated; on Runpod that includes every pod stop/start, because the Container Disk is reset. Each regeneration makes SSH clients that saved the previous key report that the host key changed, so expect that warning after every such start, not just once after upgrading.
 - The marimo access token no longer appears on `jq`'s command line while startup URL-encodes it for the proxy link in the pod logs; it reaches `jq` on stdin, so it is never visible in `ps` or `/proc/<pid>/cmdline`.
 
+### Added
+
+- `gh`, DuckDB and `runpodctl` now ship their upstream LICENSE under `/usr/share/licenses/<tool>/`, as the image is published publicly; the DuckDB and `runpodctl` licenses are pinned, checksum-verified downloads from the same tag as the tool. The smoke tests now execute all three (`--version`) as both `root` and `runpod` instead of only checking they are on `PATH`.
+- `tests/ci-suites.sh <image>` runs CI's whole smoke-test job against a local image. It adds suites for SSH (`PUBLIC_KEY` with two keys, then a real `ssh` login), the `/pre_start.sh` and `/post_start.sh` hooks, `MARIMO_WORKSPACE` path validation, a `MARIMO_VERSION` override, and a clean `docker stop`. Every suite now also checks that a notebook sandbox declaring only marimo cannot import `huggingface_hub`, `pandas`, `polars`, `torch`, `matplotlib` or `scipy`, or see a uv tool environment.
+
 ### Removed
 
 - The `MARIMO_DISABLE_AUTH` opt-out. Token authentication is now always on, because Runpod's web proxy authenticates nothing and an unauthenticated marimo editor gives anyone with the pod's proxy URL arbitrary code execution. A pod that sets `MARIMO_DISABLE_AUTH` to anything other than `false` (the old documented default, still present in existing templates) now stops at startup with an error rather than silently ignoring it; unset it, and set `MARIMO_TOKEN_PASSWORD` for a fixed password.
 
 ### Changed
 
+- Version `ARG`s in the Dockerfile are declared just before their first use instead of at the top, so a marimo, Python, `huggingface_hub` or `ty` bump no longer invalidates the apt and tool-download layers before it. Faster rebuilds; image contents are unchanged.
 - The token file is now created as the `runpod` user instead of by root with `install -o runpod`, so startup no longer needs `CAP_CHOWN` to enable auth. CI's denied-chown suites now run with auth on; a new suite checks that `MARIMO_DISABLE_AUTH=true` refuses to start and that `MARIMO_DISABLE_AUTH=false` boots normally.
+
+### Fixed
+
+- `hf` and `ty` now work in every shell, including `docker exec` and other non-login shells, because `/home/runpod/.local/bin` is on the container `PATH`. Interactive non-login shells (the Runpod web terminal, SSH, `docker exec -it`) now also load the pod environment, so `UV_CACHE_DIR`, `HF_HOME` and forwarded pod env vars point where marimo's do instead of to uv's and Hugging Face's defaults. A non-interactive `bash -c` still gets only the container environment.
+- Orphaned processes are now reaped. `tini` runs as PID 1 (the start script re-execs itself under it), so processes left behind by terminals and coding agents no longer accumulate as zombies; before, PID 1 was `su`, which never reaps them. `docker stop` still reaches marimo through `tini`.
 
 ## [0.10.2] - 2026-11-05
 

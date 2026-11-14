@@ -25,19 +25,12 @@ FROM base-${VARIANT}
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 # Re-declare ARGs that need to be visible after the final FROM.
-# IMAGE_VERSION is intentionally declared and consumed at the bottom of the
-# stage so a version bump only invalidates the final LABEL layer instead of
-# everything downstream of it.
+# Version ARGs are declared directly before their first use rather than
+# here: a changed ARG value invalidates every later RUN that can see it, so
+# declaring one at the top made each bump rebuild the whole image. The same
+# holds for IMAGE_VERSION, declared and consumed at the bottom of the stage.
 ARG VARIANT
 ARG IMAGE_DESCRIPTION="Marimo notebook server for Runpod GPU pods"
-# renovate: datasource=python-version depName=python
-ARG PYTHON_VERSION=3.13.18
-# renovate: datasource=pypi depName=marimo
-ARG MARIMO_VERSION=0.25.2
-# renovate: datasource=pypi depName=huggingface_hub
-ARG HUGGINGFACE_HUB_VERSION=2.4.0
-# renovate: datasource=pypi depName=ty
-ARG TY_VERSION=0.0.104
 
 LABEL org.opencontainers.image.title="runpod-marimo" \
       org.opencontainers.image.description="${IMAGE_DESCRIPTION}" \
@@ -53,6 +46,8 @@ ENV PYTHONUNBUFFERED=1
 # jq is load-bearing: start_marimo.sh uses it to URL-encode the access
 # token for the proxy URL printed to the pod logs (and it remains a
 # general-purpose interactive tool).
+# tini runs as PID 1 (start_marimo.sh re-execs under it) so orphaned
+# processes from terminals and agents are reaped instead of left as zombies.
 # libatomic1 is the one shared library the upstream Node binary (below)
 # needs that the Ubuntu base image does not ship; everything else it links
 # (libstdc++, libgcc_s, libm, libdl, libpthread) is already present.
@@ -66,6 +61,7 @@ RUN apt-get update --yes && \
         curl \
         wget \
         sudo \
+        tini \
         jq \
         tmux \
         libatomic1 \
@@ -92,27 +88,44 @@ RUN curl -fsSL "https://github.com/cli/cli/releases/download/${GH_VERSION}/gh_${
     echo "${GH_SHA256}  /tmp/gh.tar.gz" | sha256sum -c && \
     tar -xzf /tmp/gh.tar.gz -C /tmp && \
     install -m 755 "/tmp/gh_${GH_VERSION#v}_linux_amd64/bin/gh" /usr/local/bin/gh && \
+    install -D -m 644 "/tmp/gh_${GH_VERSION#v}_linux_amd64/LICENSE" /usr/share/licenses/gh/LICENSE && \
     rm -rf /tmp/gh.tar.gz "/tmp/gh_${GH_VERSION#v}_linux_amd64"
 
 # ── DuckDB CLI ───────────────────────────────────────────────────────────────
+# The release tarball carries no LICENSE, so it is fetched from the same tag
+# as a second checksum-verified download.
 # renovate: datasource=github-releases depName=duckdb/duckdb
 ARG DUCKDB_VERSION=v2.0.0
 ARG DUCKDB_SHA256=c6507206baf7793c6013dbd82368469a45f20dc0e17a6f92f204602f652ed2bc
+ARG DUCKDB_LICENSE_SHA256=075c33400ffcb0c586dd106a029d3e733e9da3693f8fcb9cebfc651c8a2f14e3
 RUN curl -fsSL "https://github.com/duckdb/duckdb/releases/download/${DUCKDB_VERSION}/duckdb-cli-linux-amd64.tar.gz" \
         -o /tmp/duckdb.tar.gz && \
     echo "${DUCKDB_SHA256}  /tmp/duckdb.tar.gz" | sha256sum -c && \
     tar -xzf /tmp/duckdb.tar.gz -C /usr/local/bin duckdb && \
     chmod +x /usr/local/bin/duckdb && \
-    rm /tmp/duckdb.tar.gz
+    rm /tmp/duckdb.tar.gz && \
+    mkdir -p /usr/share/licenses/duckdb && \
+    curl -fsSL "https://raw.githubusercontent.com/duckdb/duckdb/${DUCKDB_VERSION}/LICENSE" \
+        -o /usr/share/licenses/duckdb/LICENSE && \
+    echo "${DUCKDB_LICENSE_SHA256}  /usr/share/licenses/duckdb/LICENSE" | sha256sum -c && \
+    chmod -R a+rX /usr/share/licenses/duckdb
 
 # ── runpodctl ────────────────────────────────────────────────────────────────
+# A bare binary with no LICENSE alongside, so the LICENSE is fetched from
+# the same tag as a second checksum-verified download.
 # renovate: datasource=github-releases depName=runpod/runpodctl
 ARG RUNPODCTL_VERSION=v3.1.1
 ARG RUNPODCTL_SHA256=ae0a2e5ff723c8fceb609e7120dfcaa4d681bf3015adc74141812a21f2bb9486
+ARG RUNPODCTL_LICENSE_SHA256=3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986
 RUN curl -fsSL "https://github.com/runpod/runpodctl/releases/download/${RUNPODCTL_VERSION}/runpodctl-linux-amd64" \
         -o /usr/local/bin/runpodctl && \
     echo "${RUNPODCTL_SHA256}  /usr/local/bin/runpodctl" | sha256sum -c && \
-    chmod +x /usr/local/bin/runpodctl
+    chmod +x /usr/local/bin/runpodctl && \
+    mkdir -p /usr/share/licenses/runpodctl && \
+    curl -fsSL "https://raw.githubusercontent.com/runpod/runpodctl/${RUNPODCTL_VERSION}/LICENSE" \
+        -o /usr/share/licenses/runpodctl/LICENSE && \
+    echo "${RUNPODCTL_LICENSE_SHA256}  /usr/share/licenses/runpodctl/LICENSE" | sha256sum -c && \
+    chmod -R a+rX /usr/share/licenses/runpodctl
 
 # ── Node.js ──────────────────────────────────────────────────────────────────
 # Node is load-bearing for the editor, not a convenience: marimo's language
@@ -282,27 +295,35 @@ RUN mkdir -p /home/runpod/.config/marimo && \
 # ── Non-login shell environment ──────────────────────────────────────────────
 # /etc/profile.d is sourced only by LOGIN shells. The Runpod SSH proxy and
 # `docker exec` both exec bash directly without one — the MOTD removed in
-# 0.6.0 hit exactly this failure — so an agent launched from the shell a
-# user actually gets would not see MARIMO_TOKEN and could not authenticate
-# against :2971.
+# 0.6.0 hit exactly this failure — so the shell a user actually gets would
+# otherwise lack the pod's cache locations (UV_CACHE_DIR, HF_HOME and the
+# other forwarded pod env vars) and MARIMO_TOKEN.
 #
-# The value is read from the token file at shell start rather than baked in
-# here, so it cannot go stale across a pod restart, and the token file's
-# presence is treated as authoritative: absent (auth disabled, where
-# start_marimo.sh removes it) means any inbound MARIMO_TOKEN inherited from
-# the container environment is cleared rather than left pointing at a server
-# that accepts no token.
+# The pod env file is sourced only when UV_CACHE_DIR or HF_HOME is unset, so
+# it runs once per shell tree: a child shell does not overwrite changes the
+# user made in its parent. Tool PATH comes from the image's ENV instead.
+#
+# The token is read from the token file at shell start rather than baked in
+# here, so it cannot go stale across a pod restart, and the file is treated
+# as authoritative: an inbound MARIMO_TOKEN inherited from the container
+# environment is replaced with the resolved value, or cleared if the token
+# file is missing.
 # Ubuntu's stock .bashrc returns early for non-interactive shells, so
 # this covers interactive ones; a scripted `docker exec bash -c` should read
 # the token file directly, as the READMEs document.
 # hadolint ignore=SC2016  # the $(cat ...) must reach .bashrc unexpanded
 RUN printf '%s\n' \
         '' \
+        '# Pod environment (cache locations, forwarded pod env vars), which' \
+        '# /etc/profile.d gives only login shells. Once per shell tree.' \
+        'if { [ -z "${UV_CACHE_DIR:-}" ] || [ -z "${HF_HOME:-}" ]; } && [ -r /etc/profile.d/zz-pod-env.sh ]; then' \
+        '    . /etc/profile.d/zz-pod-env.sh' \
+        'fi' \
         '# Resolved marimo access token, for marimo-pair and other agent tooling.' \
         '# Read here because /etc/profile.d reaches only login shells.' \
-        '# Authoritative in both directions: an inbound MARIMO_TOKEN pod env' \
-        '# var is inherited straight from the container environment, so it' \
-        '# must be cleared when the server is running without auth.' \
+        '# Authoritative: an inbound MARIMO_TOKEN pod env var is inherited' \
+        '# straight from the container environment, so it is replaced, or' \
+        '# cleared if the token file is missing.' \
         'if [ -r /home/runpod/.config/marimo/token ]; then' \
         '    MARIMO_TOKEN=$(cat /home/runpod/.config/marimo/token) && export MARIMO_TOKEN' \
         'else' \
@@ -324,15 +345,19 @@ RUN printf '%s\n' \
 # resolving to /home/runpod/.cache/uv for the runpod user), which is
 # where the prewarmed uvx marimo cache below lands.
 #
+# PATH: the uv tools (hf, ty) live in /home/runpod/.local/bin; putting it
+# on the container PATH covers `docker exec` and other non-login shells.
+#
 # NOTE: Docker ENV is not inherited by login shells (su -l). We write
-# UV and UV_PYTHON_INSTALL_DIR to /etc/profile.d/ so they are available
-# to all login shells as well.
+# UV, UV_PYTHON_INSTALL_DIR and PATH to /etc/profile.d/ so they are
+# available to all login shells as well. MARIMO_VERSION is added to the
+# same file after the tools, next to its ARG (see the warm-up below).
 ENV UV=/usr/local/bin/uv \
     UV_PYTHON_INSTALL_DIR=/opt/uv-python \
-    MARIMO_VERSION=${MARIMO_VERSION}
+    PATH=/home/runpod/.local/bin:${PATH}
 # hadolint ignore=SC2016  # $PATH must stay literal for the profile script
-RUN printf 'export UV=/usr/local/bin/uv\nexport UV_PYTHON_INSTALL_DIR=/opt/uv-python\nexport MARIMO_VERSION=%s\nexport PATH="/home/runpod/.local/bin:$PATH"\n' \
-        "${MARIMO_VERSION}" > /etc/profile.d/runpod-env.sh
+RUN printf 'export UV=/usr/local/bin/uv\nexport UV_PYTHON_INSTALL_DIR=/opt/uv-python\nexport PATH="/home/runpod/.local/bin:$PATH"\n' \
+        > /etc/profile.d/runpod-env.sh
 
 # ── Python ───────────────────────────────────────────────────────────────────
 # uv manages CPython; no system python3 is installed. PYTHON_VERSION is
@@ -347,6 +372,8 @@ RUN printf 'export UV=/usr/local/bin/uv\nexport UV_PYTHON_INSTALL_DIR=/opt/uv-py
 # launch marimo on the first boot without re-downloading. /opt/uv-python
 # is pre-created and handed to runpod for the duration of the install,
 # then made world-readable so root can still read the interpreter metadata.
+# renovate: datasource=python-version depName=python
+ARG PYTHON_VERSION=3.13.18
 RUN install -d -o runpod -g runpod /opt/uv-python && \
     su -l runpod -c "uv python install ${PYTHON_VERSION}" && \
     chmod -R a+rX /opt/uv-python
@@ -356,6 +383,10 @@ RUN install -d -o runpod -g runpod /opt/uv-python && \
 # marimo itself is NOT installed as a tool — it runs via uvx in its own
 # per-spec venv, which we pre-populate below so the first pod boot doesn't
 # block on marimo's download + install.
+# renovate: datasource=pypi depName=huggingface_hub
+ARG HUGGINGFACE_HUB_VERSION=2.4.0
+# renovate: datasource=pypi depName=ty
+ARG TY_VERSION=0.0.104
 RUN su -l runpod -c "uv tool install huggingface_hub==${HUGGINGFACE_HUB_VERSION} && uv tool install ty==${TY_VERSION}"
 
 # ── Marimo uvx cache warm-up ─────────────────────────────────────────────────
@@ -370,7 +401,15 @@ RUN su -l runpod -c "uv tool install huggingface_hub==${HUGGINGFACE_HUB_VERSION}
 # when MARIMO_VERSION still matches the version recorded here. Users who
 # override MARIMO_VERSION at runtime pay the download cost once for their
 # new version, into UV_CACHE_DIR.
-RUN su -l runpod -c "uvx 'marimo[mcp,lsp]==${MARIMO_VERSION}' --version" && \
+#
+# MARIMO_VERSION reaches start_marimo.sh through ENV and login shells
+# through runpod-env.sh, both set here rather than with the other runtime
+# variables above, so a marimo bump rebuilds only from this point on.
+# renovate: datasource=pypi depName=marimo
+ARG MARIMO_VERSION=0.25.2
+ENV MARIMO_VERSION=${MARIMO_VERSION}
+RUN printf 'export MARIMO_VERSION=%s\n' "${MARIMO_VERSION}" >> /etc/profile.d/runpod-env.sh && \
+    su -l runpod -c "uvx 'marimo[mcp,lsp]==${MARIMO_VERSION}' --version" && \
     install -d /usr/local/share/runpod-marimo && \
     printf '%s\n' "${MARIMO_VERSION}" > /usr/local/share/runpod-marimo/prewarmed-marimo-version
 
@@ -385,8 +424,7 @@ RUN chmod +x /start_marimo.sh
 EXPOSE 2971
 
 # /health is served 200 without authentication (verified on marimo 0.24.2),
-# so the probe works identically with and without token auth — `/` answers
-# with a 303 to the login page when a token is required. start-period is
+# so the probe needs no token — `/` answers with a 303 to the login page. start-period is
 # 600s as headroom for slow first boots: before marimo launched from the
 # prewarmed cache, a first boot against an empty persistent cache (network
 # volume) re-downloaded marimo before binding :2971, and >6 min was observed
