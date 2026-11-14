@@ -15,6 +15,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - The token file is now created as the `runpod` user instead of by root with `install -o runpod`, so startup no longer needs `CAP_CHOWN` to enable auth. CI's denied-chown suites now run with auth on; a new suite checks that `MARIMO_DISABLE_AUTH=true` refuses to start and that `MARIMO_DISABLE_AUTH=false` boots normally.
 
+### Fixed
+
+- A pull request whose checksums CI repaired now shows check results on its head commit. The repair commit is pushed with `[skip ci]`, so it used to carry no checks and needed a manual empty commit to retrigger CI; the run that pushed it now posts its lint, build and smoke-test results on that commit as statuses.
+
 ## [0.10.2] - 2026-11-05
 
 ### Fixed

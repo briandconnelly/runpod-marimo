@@ -23,6 +23,9 @@ jobs:
       contents: write
     outputs:
       ref: ${{ steps.sync.outputs.ref }}
+      # true only when this run pushed a checksum fix; that commit carries
+      # [skip ci], so report-repaired-head posts this run's results on it.
+      repaired: ${{ steps.sync.outputs.repaired }}
       code_changed: ${{ steps.changes.outputs.code_changed }}
 
     steps:
@@ -62,6 +65,7 @@ jobs:
             git commit -m "chore: sync pinned download checksums [skip ci]" -- Dockerfile
             git push
             echo "::notice::Refreshed stale download checksums and pushed the fix."
+            echo "repaired=true" >>"$GITHUB_OUTPUT"
           fi
 
           echo "ref=$(git rev-parse HEAD)" >>"$GITHUB_OUTPUT"
@@ -307,3 +311,38 @@ jobs:
             not grep -qF "Error: failed to chown" "$RUNNER_TEMP/chown.log"
           docker rm -f marimo-ci
           summary
+
+  # The checksum fix is pushed with [skip ci], so that commit, the PR's new
+  # head, would otherwise carry no checks and need a manual retrigger. This
+  # run already linted, built and tested exactly that tree, so mirror its
+  # results onto the commit as statuses. Forks never reach this job: their
+  # branch is only checked, never repaired, so `repaired` is never true.
+  report-repaired-head:
+    runs-on: ubuntu-latest
+    needs: [checksums, lint, build, smoke-test]
+    if: always() && needs.checksums.outputs.repaired == 'true'
+    timeout-minutes: 5
+    permissions:
+      statuses: write
+
+    steps:
+      - name: Post check results on the repaired commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ needs.checksums.outputs.ref }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          LINT: ${{ needs.lint.result }}
+          BUILD: ${{ needs.build.result }}
+          SMOKE_TEST: ${{ needs.smoke-test.result }}
+        run: |
+          post() {
+            local job="$1" result="$2" state=failure
+            case "$result" in success|skipped) state=success ;; esac
+            gh api --method POST "repos/$REPO/statuses/$SHA" \
+              -f state="$state" -f context="ci/$job" -f target_url="$RUN_URL" \
+              -f description="$job: $result (from the run that pushed this commit)"
+          }
+          post lint "$LINT"
+          post build "$BUILD"
+          post smoke-test "$SMOKE_TEST"
