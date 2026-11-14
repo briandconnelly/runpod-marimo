@@ -36,6 +36,7 @@ Pre-installing packages would allow imports that work in the pod but have no rec
 | `MARIMO_WORKSPACE` | Path to open in marimo's file browser | `/workspace` |
 | `MARIMO_CACHE_DIR` | Parent directory for uv and Hugging Face caches | `$MARIMO_WORKSPACE/.cache` |
 | `MARIMO_TOKEN_PASSWORD` | Password required to access the marimo UI | _(falls back to `JUPYTER_PASSWORD`, else a generated token)_ |
+| `MARIMO_VERSION` | marimo version to run. A version other than the image's prewarmed one is downloaded once into `UV_CACHE_DIR` at startup | _(the version pinned in the image)_ |
 
 `/workspace` is where Runpod mounts network volumes, so notebooks created through the file browser automatically persist across pod stop/start when a volume is attached.
 Without a volume, `/workspace` is a regular container directory (ephemeral).
@@ -61,7 +62,7 @@ MARIMO_CACHE_DIR=/home/runpod/.cache
 That restores ephemeral container-local caches, so notebook dependencies and models are re-downloaded whenever the container is recreated.
 `UV_CACHE_DIR` and `HF_HOME` can also be set individually to relocate either cache independently.
 
-> **Shared volumes:** `HF_HOME` stores the Hugging Face auth token (`~/.cache/huggingface/token`), so a volume shared between pods will also share whoever is currently logged in with `huggingface-cli login`. If that's not what you want, keep `HF_HOME` off the shared volume (`HF_HOME=/home/runpod/.cache/huggingface`) while leaving `UV_CACHE_DIR` wherever you want it.
+> **Shared volumes:** `HF_HOME` stores the Hugging Face auth token (`~/.cache/huggingface/token`), so a volume shared between pods will also share whoever is currently logged in with `hf auth login`. If that's not what you want, keep `HF_HOME` off the shared volume (`HF_HOME=/home/runpod/.cache/huggingface`) while leaving `UV_CACHE_DIR` wherever you want it.
 
 ## Authentication
 
@@ -87,6 +88,17 @@ The pod is single-tenant, so this matches the access the console already grants;
 
 > **Environment variable forwarding:** all environment variables set on the pod — including API keys and other credentials — are forwarded into the marimo and SSH login shell environments so that notebook code can reach them.
 > Be aware that any secret set on the pod is accessible from notebook code.
+
+## Startup hooks and SSH
+
+`start_marimo.sh` runs as `root` and, before launching marimo, does the following in order:
+
+1. **`/pre_start.sh`**, if the file exists, runs with `bash` (it need not be executable) before SSH and any other setup. A non-zero exit aborts startup: the container exits with `Error: /pre_start.sh failed; aborting startup.`
+2. **SSH**, if `PUBLIC_KEY` is set (Runpod sets it from the SSH keys on your account). Each newline-separated key in it is added to `/root/.ssh/authorized_keys` (once; restarts do not duplicate keys), any missing SSH host key is generated, and `sshd` starts. SSH logs in as `root`. A failure in this step aborts startup, since a pod launched with `PUBLIC_KEY` is expected to accept SSH. Without `PUBLIC_KEY`, `sshd` does not start.
+3. Workspace, cache and environment-forwarding setup.
+4. **`/post_start.sh`**, if the file exists, runs with `bash` after that setup and before marimo starts. A non-zero exit only logs `Warning: /post_start.sh failed; continuing to start marimo.`, so a broken hook cannot keep the notebook server down.
+
+Both hooks run as `root` and inherit the pod's environment. To use them, bake them into a derived image or mount them at those paths.
 
 ## What is included
 
@@ -149,3 +161,8 @@ docker build -t runpod-marimo:cpu \
   --build-arg VARIANT=cpu \
   --build-arg "IMAGE_DESCRIPTION=Marimo notebook server for Runpod CPU pods" .
 ```
+
+## License
+
+The code in this repository is released under the [MIT License](LICENSE).
+The published images also contain third-party software under its own licenses.
