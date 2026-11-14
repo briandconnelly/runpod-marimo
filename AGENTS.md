@@ -32,6 +32,7 @@ Every downloaded binary follows one pattern; `scripts/sync-checksums.sh` and Ren
 
 - A `# renovate: datasource=… depName=…` comment directly above `ARG <TOOL>_VERSION=…`.
 - A sibling `ARG <TOOL>_SHA256=…` verified with `sha256sum -c` in the same `RUN`. Put any placeholder value in it; CI computes the real one.
+  This holds only when the matching `_VERSION` differs from `main`. A new `_SHA256` pin (a new `<TOOL>_LICENSE_SHA256`, say) for a tool whose `_VERSION` is unchanged from `main` is refused by the `--base` interlock, in CI and locally, because a placeholder looks the same as upstream mutating a released tag. Compute it once with `scripts/sync-checksums.sh` (no `--base`), confirm `git diff` touches only the new ARG line, then confirm `scripts/sync-checksums.sh --check --base origin/main` exits 0.
 - The tool's LICENSE under `/usr/share/licenses/<tool>/`. If the release tarball has none, fetch it from the same tag as a second pinned download named `<TOOL>_LICENSE_SHA256`.
 - Smoke checks in `tests/common.sh` that execute the binary (`--version`) as both `root` and `runpod`.
 
@@ -49,7 +50,7 @@ scripts/check-readme-length.sh
 CI's `lint` job runs the same check on every pull request.
 It measures bytes rather than characters, which is the conservative bound: a UTF-8 byte count is never below the character count.
 `README.md` is the long-form documentation and has no limit; when trimming a variant README, move the detail there (or confirm it is already there) and link to the repository rather than deleting it.
-`README-gpu.md` sits within a few bytes of the cap; any addition needs an offsetting cut.
+The script prints each file's remaining budget; read it before adding text to either README, and offset any addition that would exceed it with a cut.
 
 ## Releases
 
