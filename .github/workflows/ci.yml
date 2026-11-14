@@ -9,6 +9,11 @@ on:
   pull_request:
     branches: [main]
 
+# A new push to a PR supersedes the run on its previous head.
+concurrency:
+  group: ci-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
 jobs:
   # Renovate bumps a tool's *_VERSION ARG but cannot recompute its *_SHA256
   # sibling, so those PRs arrive with a stale checksum and die on the
@@ -17,6 +22,7 @@ jobs:
   # every later rebuild is still locked to the bytes reviewed on this PR.
   checksums:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     permissions:
@@ -95,6 +101,7 @@ jobs:
   # Lints the tree as the checksums job left it, same as build/smoke-test.
   lint:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     needs: checksums
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -131,6 +138,7 @@ jobs:
     # Skipped (not absent) on docs-only PRs so a required check still
     # reports a conclusion branch protection accepts.
     if: needs.checksums.outputs.code_changed == 'true'
+    timeout-minutes: 45
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     permissions:

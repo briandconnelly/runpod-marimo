@@ -18,9 +18,15 @@ on:
       - marimo.toml
       - .github/workflows/cache-warm.yml
 
+# A newer push to main supersedes an in-flight warm-up.
+concurrency:
+  group: cache-warm-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     env:
       FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     permissions:
