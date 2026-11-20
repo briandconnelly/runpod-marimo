@@ -96,7 +96,7 @@ RUN curl -fsSL "https://github.com/cli/cli/releases/download/${GH_VERSION}/gh_${
 # as a second checksum-verified download.
 # renovate: datasource=github-releases depName=duckdb/duckdb
 ARG DUCKDB_VERSION=v2.0.1
-ARG DUCKDB_SHA256=c6507206baf7793c6013dbd82368469a45f20dc0e17a6f92f204602f652ed2bc
+ARG DUCKDB_SHA256=b676268be4d39e4e41a904442c9796c9914e645cc085c7505f048f2c992b5eca
 ARG DUCKDB_LICENSE_SHA256=075c33400ffcb0c586dd106a029d3e733e9da3693f8fcb9cebfc651c8a2f14e3
 RUN curl -fsSL "https://github.com/duckdb/duckdb/releases/download/${DUCKDB_VERSION}/duckdb-cli-linux-amd64.tar.gz" \
         -o /tmp/duckdb.tar.gz && \
