@@ -232,7 +232,7 @@ RUN curl -fsSL "https://github.com/anomalyco/opencode/releases/download/${OPENCO
 # repo root, outside the extracted subtree, so it is unpacked separately —
 # this image is published publicly and ships Apache-2.0 code.
 # renovate: datasource=github-tags depName=marimo-team/marimo-pair
-ARG MARIMO_PAIR_VERSION=v0.0.20
+ARG MARIMO_PAIR_VERSION=v0.1.0
 ARG MARIMO_PAIR_SHA256=7627a0396e06527f1fd0d55e0fe1975a554440eaf960eba91fa1ab3ceeda40e8
 RUN curl -fsSL "https://github.com/marimo-team/marimo-pair/archive/refs/tags/${MARIMO_PAIR_VERSION}.tar.gz" \
         -o /tmp/marimo-pair.tar.gz && \
