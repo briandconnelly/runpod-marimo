@@ -406,7 +406,7 @@ RUN su -l runpod -c "uv tool install huggingface_hub==${HUGGINGFACE_HUB_VERSION}
 # through runpod-env.sh, both set here rather than with the other runtime
 # variables above, so a marimo bump rebuilds only from this point on.
 # renovate: datasource=pypi depName=marimo
-ARG MARIMO_VERSION=0.25.2
+ARG MARIMO_VERSION=0.26.0
 ENV MARIMO_VERSION=${MARIMO_VERSION}
 RUN printf 'export MARIMO_VERSION=%s\n' "${MARIMO_VERSION}" >> /etc/profile.d/runpod-env.sh && \
     su -l runpod -c "uvx 'marimo[mcp,lsp]==${MARIMO_VERSION}' --version" && \
