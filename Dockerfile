@@ -384,7 +384,7 @@ RUN install -d -o runpod -g runpod /opt/uv-python && \
 # per-spec venv, which we pre-populate below so the first pod boot doesn't
 # block on marimo's download + install.
 # renovate: datasource=pypi depName=huggingface_hub
-ARG HUGGINGFACE_HUB_VERSION=2.4.0
+ARG HUGGINGFACE_HUB_VERSION=2.5.0
 # renovate: datasource=pypi depName=ty
 ARG TY_VERSION=0.0.104
 RUN su -l runpod -c "uv tool install huggingface_hub==${HUGGINGFACE_HUB_VERSION} && uv tool install ty==${TY_VERSION}"
