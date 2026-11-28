@@ -177,9 +177,9 @@ RUN curl -fsSL "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-l
 # a tiny launcher goes on PATH — the same shape as pi's own installer, which
 # execs the release binary from a managed directory.
 # renovate: datasource=github-releases depName=earendil-works/pi
-ARG PI_VERSION=v1.5.2
-ARG PI_SHA256=811c6f2c9e7aaee252b5404252e556fb713aa209c1f7f924226aa77d4ef70cb5
-ARG PI_LICENSE_SHA256=0457f5bcec3b3b211605dfb5d1a49042fd638f3686a410fe099c24a25af13c48
+ARG PI_VERSION=v1.7.0
+ARG PI_SHA256=42f7ed67e83f727fe51dd2746d50dc45c7d1784159a9518296a282402ac68f4a
+ARG PI_LICENSE_SHA256=4780a6e9d4b2213784027092b8f305d49059728495fab1ddb93f3c6fb8b283c7
 # hadolint ignore=SC2016  # the "$@" must reach the launcher unexpanded
 RUN curl -fsSL "https://github.com/earendil-works/pi/releases/download/${PI_VERSION}/pi-linux-x64.tar.gz" \
         -o /tmp/pi.tar.gz && \
